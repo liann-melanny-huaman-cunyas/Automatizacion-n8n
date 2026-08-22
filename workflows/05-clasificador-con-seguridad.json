@@ -1,0 +1,474 @@
+{
+  "name": "05 - Clasificador de correos - CON seguridad SOAR",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger-05",
+      "name": "Inicio manual",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ahora = new Date();\nconst ts = Date.now();\nconst fecha = ahora.toISOString().slice(0,19).replace('T',' ');\n\nreturn [{\n  json: {\n    id_ejecucion: 'CLAS-SEG-' + ts,\n    id_incidente: 'INC-CLAS-' + ts,\n    flujo: '05',\n    proceso: 'clasificador_correos',\n    escenario: 'con_seguridad',\n    remitente: 'externo.sospechoso@ejemplo.com',\n    asunto: 'URGENTE: actualice su contraseña',\n    cuerpo: 'Su cuenta será bloqueada. Ingrese al siguiente enlace para verificar su contraseña inmediatamente.',\n    categoria_real: 'phishing',\n    hora_ingreso: fecha\n  }\n}];"
+      },
+      "id": "correo-prueba-05",
+      "name": "Generar correo de prueba",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const listaBlanca = [\n  'secretaria.academica@instituto.edu.pe',\n  'direccion.general@instituto.edu.pe',\n  'coordinacion@instituto.edu.pe'\n];\n\nreturn items.map(item => {\n  const remitente = String(item.json.remitente || '').trim().toLowerCase();\n  item.json.remitente = remitente;\n  item.json.emisor_autorizado = listaBlanca.includes(remitente);\n  item.json.control_validacion_origen = true;\n  return item;\n});"
+      },
+      "id": "validar-remitente-05",
+      "name": "Validar remitente",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const texto = `${item.json.asunto || ''} ${item.json.cuerpo || ''}`.toLowerCase();\n\n  const patrones = [\n    'contraseña',\n    'password',\n    'verifique su cuenta',\n    'actualice su cuenta',\n    'urgente',\n    'será bloqueada',\n    'sera bloqueada',\n    'ingrese al siguiente enlace',\n    'premio',\n    'transferencia',\n    'credenciales'\n  ];\n\n  const coincidencias = patrones.filter(p => texto.includes(p));\n\n  item.json.patrones_sospechosos = coincidencias;\n  item.json.contenido_sospechoso = coincidencias.length > 0;\n  item.json.control_filtrado = true;\n\n  return item;\n});"
+      },
+      "id": "filtrar-contenido-05",
+      "name": "Filtrar contenido",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  item.json.prompt_groq = `Actúa como analista de ciberseguridad.\n\nAnaliza el siguiente correo institucional y clasifícalo únicamente como phishing, spam o legitimo.\n\nAsigna un score de riesgo entero entre 1 y 10.\n\nResponde EXCLUSIVAMENTE con JSON válido y sin markdown con esta estructura:\n{\"categoria\":\"phishing|spam|legitimo\",\"score\":1,\"justificacion\":\"texto breve\"}\n\nRemitente: ${item.json.remitente}\nRemitente autorizado: ${item.json.emisor_autorizado}\nAsunto: ${item.json.asunto}\nCuerpo: ${item.json.cuerpo}\nPatrones sospechosos: ${JSON.stringify(item.json.patrones_sospechosos)}`;\n\n  return item;\n});"
+      },
+      "id": "preparar-prompt-05",
+      "name": "Preparar analisis IA",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        920,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.GROQ_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ model: 'openai/gpt-oss-20b', messages: [{ role: 'user', content: $json.prompt_groq }], temperature: 0.1 }) }}",
+        "options": {}
+      },
+      "id": "groq-05",
+      "name": "Groq - Clasificar amenaza",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1170,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $('Filtrar contenido').item.json;\n\nlet raw = '';\ntry {\n  raw = $json.choices[0].message.content;\n} catch (e) {\n  raw = '';\n}\n\nlet resultado;\ntry {\n  const limpio = String(raw)\n    .replace(/```json/gi, '')\n    .replace(/```/g, '')\n    .trim();\n  resultado = JSON.parse(limpio);\n} catch (e) {\n  resultado = {\n    categoria: 'indeterminado',\n    score: 5,\n    justificacion: 'No se pudo interpretar la respuesta del modelo.'\n  };\n}\n\nlet score = Number(resultado.score);\nif (!Number.isFinite(score)) score = 5;\nscore = Math.max(1, Math.min(10, Math.round(score)));\n\nif (original.emisor_autorizado === false) {\n  score = Math.max(score, 8);\n}\n\nif (original.contenido_sospechoso === true) {\n  score = Math.max(score, 7);\n}\n\nlet nivel = 'bajo';\nif (score >= 8) nivel = 'alto';\nelse if (score >= 4) nivel = 'medio';\n\nconst ahora = new Date();\nconst horaDeteccion = ahora.toISOString().slice(0,19).replace('T',' ');\nconst ingreso = new Date(original.hora_ingreso.replace(' ','T'));\nconst tiempoDeteccionMin = (ahora.getTime() - ingreso.getTime()) / 60000;\n\nconst categoriaSistema = String(resultado.categoria || 'indeterminado').toLowerCase();\n\nreturn [{\n  json: {\n    ...original,\n    categoria_sistema: categoriaSistema,\n    score_riesgo: score,\n    justificacion: resultado.justificacion || '',\n    nivel,\n    clasificacion_correcta: categoriaSistema === String(original.categoria_real || '').toLowerCase(),\n    hora_deteccion: horaDeteccion,\n    tiempo_deteccion_min: Number(tiempoDeteccionMin.toFixed(4)),\n    control_deteccion: true,\n    control_clasificacion: true,\n    control_score: true,\n    control_enrutamiento: true\n  }\n}];"
+      },
+      "id": "procesar-ia-05",
+      "name": "Procesar resultado de seguridad",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1420,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.nivel}}",
+                    "rightValue": "bajo",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "bajo"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.nivel}}",
+                    "rightValue": "medio",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "medio"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.nivel}}",
+                    "rightValue": "alto",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "alto"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "switch-riesgo-05",
+      "name": "Enrutar segun riesgo",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        1670,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  item.json.accion_ejecutada = 'Correo permitido';\n  item.json.activo_comprometido = false;\n  item.json.incidente_resuelto = true;\n  item.json.ejecucion_segura = true;\n  item.json.alerta_generada = false;\n  item.json.control_respuesta = true;\n  item.json.control_alerta = false;\n  item.json.control_bloqueo = false;\n  item.json.hora_resolucion = new Date().toISOString().slice(0,19).replace('T',' ');\n  return item;\n});"
+      },
+      "id": "riesgo-bajo-05",
+      "name": "Riesgo bajo - Permitir",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1930,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  item.json.accion_ejecutada = 'Correo retenido para revision';\n  item.json.activo_comprometido = false;\n  item.json.incidente_resuelto = true;\n  item.json.ejecucion_segura = true;\n  item.json.alerta_generada = true;\n  item.json.control_respuesta = true;\n  item.json.control_alerta = true;\n  item.json.control_bloqueo = true;\n  item.json.hora_resolucion = new Date().toISOString().slice(0,19).replace('T',' ');\n  return item;\n});"
+      },
+      "id": "riesgo-medio-05",
+      "name": "Riesgo medio - Retener",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1930,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  item.json.accion_ejecutada = 'Correo bloqueado automaticamente';\n  item.json.activo_comprometido = false;\n  item.json.incidente_resuelto = true;\n  item.json.ejecucion_segura = true;\n  item.json.alerta_generada = true;\n  item.json.control_respuesta = true;\n  item.json.control_alerta = true;\n  item.json.control_bloqueo = true;\n  item.json.hora_resolucion = new Date().toISOString().slice(0,19).replace('T',' ');\n  return item;\n});"
+      },
+      "id": "riesgo-alto-05",
+      "name": "Riesgo alto - Bloquear",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1930,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const deteccion = new Date(item.json.hora_deteccion.replace(' ','T'));\n  const resolucion = new Date(item.json.hora_resolucion.replace(' ','T'));\n  const tiempo = (resolucion.getTime() - deteccion.getTime()) / 60000;\n\n  item.json.tiempo_respuesta_min = Number(tiempo.toFixed(4));\n  item.json.estado_ejecucion = 'success';\n  return item;\n});"
+      },
+      "id": "metricas-finales-05",
+      "name": "Calcular metricas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO ejecuciones (flujo, proceso, escenario, inicio, fin, estado, incidente, activo_comprometido, ejecucion_segura) VALUES ('{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.hora_ingreso}}', '{{$json.hora_resolucion}}', '{{$json.estado_ejecucion}}', {{$json.categoria_sistema !== 'legitimo' ? 1 : 0}}, {{$json.activo_comprometido ? 1 : 0}}, {{$json.ejecucion_segura ? 1 : 0}});"
+      },
+      "id": "mysql-ejecucion-05",
+      "name": "MySQL - Registrar ejecucion",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        2470,
+        160
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "",
+          "name": "CEFIC MySQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO log_eventos (flujo, proceso, escenario, id_ejecucion, id_incidente, hora_ingreso, hora_deteccion, hora_resolucion, categoria, categoria_real, score_riesgo, nivel, accion_ejecutada, activo_comprometido, incidente_resuelto) VALUES ('{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.id_ejecucion}}', '{{$json.id_incidente}}', '{{$json.hora_ingreso}}', '{{$json.hora_deteccion}}', '{{$json.hora_resolucion}}', '{{$json.categoria_sistema}}', '{{$json.categoria_real}}', {{$json.score_riesgo}}, '{{$json.nivel}}', '{{$json.accion_ejecutada}}', {{$json.activo_comprometido ? 1 : 0}}, {{$json.incidente_resuelto ? 1 : 0}});"
+      },
+      "id": "mysql-evento-05",
+      "name": "MySQL - Registrar evento",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        2470,
+        300
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "",
+          "name": "CEFIC MySQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO clasificaciones_amenazas (id_ejecucion, flujo, proceso, escenario, fecha_procesamiento, categoria_sistema, categoria_real, clasificacion_correcta, score_riesgo) VALUES ('{{$json.id_ejecucion}}', '{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.hora_deteccion}}', '{{$json.categoria_sistema}}', '{{$json.categoria_real}}', {{$json.clasificacion_correcta ? 1 : 0}}, {{$json.score_riesgo}});"
+      },
+      "id": "mysql-clasificacion-05",
+      "name": "MySQL - Registrar clasificacion",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        2470,
+        440
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "",
+          "name": "CEFIC MySQL"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Inicio manual": {
+      "main": [
+        [
+          {
+            "node": "Generar correo de prueba",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar correo de prueba": {
+      "main": [
+        [
+          {
+            "node": "Validar remitente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar remitente": {
+      "main": [
+        [
+          {
+            "node": "Filtrar contenido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtrar contenido": {
+      "main": [
+        [
+          {
+            "node": "Preparar analisis IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar analisis IA": {
+      "main": [
+        [
+          {
+            "node": "Groq - Clasificar amenaza",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq - Clasificar amenaza": {
+      "main": [
+        [
+          {
+            "node": "Procesar resultado de seguridad",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Procesar resultado de seguridad": {
+      "main": [
+        [
+          {
+            "node": "Enrutar segun riesgo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enrutar segun riesgo": {
+      "main": [
+        [
+          {
+            "node": "Riesgo bajo - Permitir",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Riesgo medio - Retener",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Riesgo alto - Bloquear",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Riesgo bajo - Permitir": {
+      "main": [
+        [
+          {
+            "node": "Calcular metricas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Riesgo medio - Retener": {
+      "main": [
+        [
+          {
+            "node": "Calcular metricas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Riesgo alto - Bloquear": {
+      "main": [
+        [
+          {
+            "node": "Calcular metricas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calcular metricas": {
+      "main": [
+        [
+          {
+            "node": "MySQL - Registrar ejecucion",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "MySQL - Registrar evento",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "MySQL - Registrar clasificacion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "pinData": {},
+  "versionId": "55555555-5555-4555-8555-555555555555",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

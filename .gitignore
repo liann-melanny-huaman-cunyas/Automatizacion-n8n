@@ -1,0 +1,86 @@
+# ==========================================
+# CEFIC - Archivos ignorados por Git
+# ==========================================
+
+# Variables de entorno / credenciales
+.env
+.env.*
+!.env.example
+
+# Credenciales y secretos
+*.key
+*.pem
+*.crt
+secrets/
+credentials/
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editores / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Node.js
+node_modules/
+npm-debug.log*
+.npm/
+
+# PHP / Composer
+vendor/
+
+# Archivos temporales
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# Caché
+.cache/
+__pycache__/
+*.pyc
+
+# Cobertura / tests
+coverage/
+
+# Docker temporales
+docker-compose.override.yml
+
+# Bases de datos locales / dumps
+*.sql
+*.sql.gz
+*.db
+*.sqlite
+*.sqlite3
+
+# Backups
+backups/
+backup/
+*.zip
+*.tar
+*.tar.gz
+
+# Archivos de ejecución de n8n locales
+.n8n/
+
+# Certificados locales
+certs/
+
+# Archivos sensibles adicionales
+.env.local
+.env.production
+.env.development

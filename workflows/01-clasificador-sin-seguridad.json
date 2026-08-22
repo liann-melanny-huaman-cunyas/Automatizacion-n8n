@@ -1,0 +1,157 @@
+{
+  "name": "01 - Clasificador de correos - SIN seguridad",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger-01",
+      "name": "Inicio manual",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ahora = new Date();\n\nreturn [\n  {\n    json: {\n      id_ejecucion: 'CLAS-SIN-' + Date.now(),\n      id_incidente: 'INC-' + Date.now(),\n      flujo: '01',\n      proceso: 'clasificador_correos',\n      escenario: 'sin_seguridad',\n      remitente: 'usuario@ejemplo.com',\n      asunto: 'Actualización urgente de contraseña',\n      cuerpo: 'Ingrese al siguiente enlace para actualizar inmediatamente su contraseña.',\n      categoria_real: 'phishing',\n      hora_ingreso: ahora.toISOString().slice(0, 19).replace('T', ' ')\n    }\n  }\n];"
+      },
+      "id": "datos-prueba-01",
+      "name": "Generar correo de prueba",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const texto = `${item.json.asunto} ${item.json.cuerpo}`.toLowerCase();\n\n  let categoria = 'legitimo';\n\n  const palabrasPhishing = [\n    'contraseña',\n    'password',\n    'urgente',\n    'actualizar inmediatamente',\n    'verifique su cuenta',\n    'enlace'\n  ];\n\n  const palabrasSpam = [\n    'oferta',\n    'promoción',\n    'gratis',\n    'descuento',\n    'premio'\n  ];\n\n  if (palabrasPhishing.some(p => texto.includes(p))) {\n    categoria = 'phishing';\n  } else if (palabrasSpam.some(p => texto.includes(p))) {\n    categoria = 'spam';\n  }\n\n  const deteccion = new Date();\n\n  item.json.categoria_sistema = categoria;\n  item.json.clasificacion_correcta = categoria === item.json.categoria_real;\n  item.json.hora_deteccion = deteccion.toISOString().slice(0, 19).replace('T', ' ');\n\n  return item;\n});"
+      },
+      "id": "clasificacion-basica-01",
+      "name": "Clasificación básica",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO ejecuciones (flujo, proceso, escenario, inicio, fin, estado, incidente, activo_comprometido, ejecucion_segura) VALUES ('{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.hora_ingreso}}', NOW(), 'success', TRUE, TRUE, FALSE);"
+      },
+      "id": "mysql-ejecucion-01",
+      "name": "MySQL - Registrar ejecución",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        760,
+        160
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "",
+          "name": "CEFIC MySQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO clasificaciones_amenazas (id_ejecucion, flujo, proceso, escenario, fecha_procesamiento, categoria_sistema, categoria_real, clasificacion_correcta, score_riesgo) VALUES ('{{$json.id_ejecucion}}', '{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.hora_deteccion}}', '{{$json.categoria_sistema}}', '{{$json.categoria_real}}', {{$json.clasificacion_correcta ? 1 : 0}}, NULL);"
+      },
+      "id": "mysql-clasificacion-01",
+      "name": "MySQL - Registrar clasificación",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        760,
+        300
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "",
+          "name": "CEFIC MySQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO log_eventos (flujo, proceso, escenario, id_ejecucion, id_incidente, hora_ingreso, hora_deteccion, hora_resolucion, categoria, categoria_real, score_riesgo, nivel, accion_ejecutada, activo_comprometido, incidente_resuelto) VALUES ('{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.id_ejecucion}}', '{{$json.id_incidente}}', '{{$json.hora_ingreso}}', '{{$json.hora_deteccion}}', NOW(), '{{$json.categoria_sistema}}', '{{$json.categoria_real}}', NULL, NULL, 'Sin respuesta automatizada', TRUE, TRUE);"
+      },
+      "id": "mysql-evento-01",
+      "name": "MySQL - Registrar evento",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        760,
+        440
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "",
+          "name": "CEFIC MySQL"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Inicio manual": {
+      "main": [
+        [
+          {
+            "node": "Generar correo de prueba",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar correo de prueba": {
+      "main": [
+        [
+          {
+            "node": "Clasificación básica",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clasificación básica": {
+      "main": [
+        [
+          {
+            "node": "MySQL - Registrar ejecución",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "MySQL - Registrar clasificación",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "MySQL - Registrar evento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "pinData": {},
+  "versionId": "11111111-1111-4111-8111-111111111111",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

@@ -1,0 +1,388 @@
+{
+  "name": "06 - Certificados - CON seguridad SOAR",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger-06",
+      "name": "Inicio manual",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ahora = new Date();\nconst ts = Date.now();\nconst fecha = ahora.toISOString().slice(0,19).replace('T',' ');\n\nreturn [{\n  json: {\n    id_ejecucion: 'CERT-SEG-' + ts,\n    id_incidente: 'INC-CERT-' + ts,\n    flujo: '06',\n    proceso: 'certificados',\n    escenario: 'con_seguridad',\n    bloque: 'con_seguridad',\n    remitente_email: 'externo.sospechoso@ejemplo.com',\n    asunto: 'Solicitud urgente de certificado de estudios',\n    cuerpo: 'Solicito certificado de estudios. Favor procesar urgentemente y enviar al correo indicado.',\n    categoria_real: 'solicitud_sospechosa',\n    hora_ingreso: fecha\n  }\n}];"
+      },
+      "id": "solicitud-prueba-06",
+      "name": "Generar solicitud de prueba",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const listaBlanca = [\n  'secretaria.academica@instituto.edu.pe',\n  'direccion.general@instituto.edu.pe',\n  'coordinacion@instituto.edu.pe'\n];\n\nreturn items.map(item => {\n  const remitente = String(item.json.remitente_email || '').trim().toLowerCase();\n  item.json.remitente_email = remitente;\n  item.json.emisor_autorizado = listaBlanca.includes(remitente);\n  item.json.control_validacion_origen = true;\n  return item;\n});"
+      },
+      "id": "validar-remitente-06",
+      "name": "Validar remitente",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const texto = `${item.json.asunto || ''} ${item.json.cuerpo || ''}`.toLowerCase();\n\n  const patrones = [\n    'urgente',\n    'enviar al correo',\n    'procesar inmediatamente',\n    'adjunto',\n    'credencial',\n    'contraseña',\n    'modificar datos',\n    'cambiar destinatario'\n  ];\n\n  const coincidencias = patrones.filter(p => texto.includes(p));\n\n  item.json.patrones_sospechosos = coincidencias;\n  item.json.contenido_sospechoso = coincidencias.length > 0;\n  item.json.control_filtrado = true;\n\n  return item;\n});"
+      },
+      "id": "filtrar-entrada-06",
+      "name": "Filtrar entrada",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  item.json.prompt_groq = `Actúa como analista de ciberseguridad.\n\nAnaliza la siguiente solicitud de certificado y clasifícala como legitima o solicitud_sospechosa.\n\nAsigna un score de riesgo entero entre 1 y 10.\n\nResponde EXCLUSIVAMENTE con JSON válido:\n{\"categoria\":\"legitima|solicitud_sospechosa\",\"score\":1,\"justificacion\":\"texto breve\"}\n\nRemitente: ${item.json.remitente_email}\nRemitente autorizado: ${item.json.emisor_autorizado}\nAsunto: ${item.json.asunto}\nCuerpo: ${item.json.cuerpo}\nPatrones sospechosos: ${JSON.stringify(item.json.patrones_sospechosos)}`;\n\n  return item;\n});"
+      },
+      "id": "preparar-prompt-06",
+      "name": "Preparar analisis IA",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.GROQ_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ model: 'openai/gpt-oss-20b', messages: [{ role: 'user', content: $json.prompt_groq }], temperature: 0.1 }) }}",
+        "options": {}
+      },
+      "id": "groq-06",
+      "name": "Groq - Analizar solicitud",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1170, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $('Filtrar entrada').item.json;\n\nlet raw = '';\ntry {\n  raw = $json.choices[0].message.content;\n} catch (e) {\n  raw = '';\n}\n\nlet resultado;\ntry {\n  resultado = JSON.parse(String(raw).replace(/```json/gi,'').replace(/```/g,'').trim());\n} catch (e) {\n  resultado = {\n    categoria: 'solicitud_sospechosa',\n    score: 5,\n    justificacion: 'No se pudo interpretar la respuesta del modelo.'\n  };\n}\n\nlet score = Number(resultado.score);\nif (!Number.isFinite(score)) score = 5;\nscore = Math.max(1, Math.min(10, Math.round(score)));\n\nif (original.emisor_autorizado === false) score = Math.max(score, 8);\nif (original.contenido_sospechoso === true) score = Math.max(score, 7);\n\nlet nivel = 'bajo';\nif (score >= 8) nivel = 'alto';\nelse if (score >= 4) nivel = 'medio';\n\nconst ahora = new Date();\nconst horaDeteccion = ahora.toISOString().slice(0,19).replace('T',' ');\nconst ingreso = new Date(original.hora_ingreso.replace(' ','T'));\nconst tiempoDeteccion = (ahora.getTime() - ingreso.getTime()) / 60000;\n\nconst categoriaSistema = String(resultado.categoria || 'solicitud_sospechosa').toLowerCase();\n\nreturn [{\n  json: {\n    ...original,\n    categoria_sistema: categoriaSistema,\n    score_riesgo: score,\n    nivel,\n    justificacion: resultado.justificacion || '',\n    clasificacion_correcta: categoriaSistema === String(original.categoria_real || '').toLowerCase(),\n    hora_deteccion: horaDeteccion,\n    tiempo_deteccion_min: Number(tiempoDeteccion.toFixed(4)),\n    control_deteccion: true,\n    control_clasificacion: true,\n    control_score: true,\n    control_enrutamiento: true\n  }\n}];"
+      },
+      "id": "procesar-resultado-06",
+      "name": "Procesar resultado de seguridad",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1420, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.nivel}}",
+                    "rightValue": "bajo",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "bajo"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.nivel}}",
+                    "rightValue": "medio",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "medio"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.nivel}}",
+                    "rightValue": "alto",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "alto"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "switch-riesgo-06",
+      "name": "Enrutar segun riesgo",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1670, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  item.json.estado_certificado = 'aprobado';\n  item.json.accion_ejecutada = 'Solicitud procesada';\n  item.json.activo_comprometido = false;\n  item.json.incidente_resuelto = true;\n  item.json.ejecucion_segura = true;\n  item.json.hora_resolucion = new Date().toISOString().slice(0,19).replace('T',' ');\n  return item;\n});"
+      },
+      "id": "riesgo-bajo-06",
+      "name": "Riesgo bajo - Procesar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1930, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  item.json.estado_certificado = 'pendiente';\n  item.json.accion_ejecutada = 'Solicitud retenida para revision';\n  item.json.activo_comprometido = false;\n  item.json.incidente_resuelto = true;\n  item.json.ejecucion_segura = true;\n  item.json.hora_resolucion = new Date().toISOString().slice(0,19).replace('T',' ');\n  return item;\n});"
+      },
+      "id": "riesgo-medio-06",
+      "name": "Riesgo medio - Retener",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1930, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  item.json.estado_certificado = 'cuarentena';\n  item.json.accion_ejecutada = 'Solicitud enviada a cuarentena';\n  item.json.activo_comprometido = false;\n  item.json.incidente_resuelto = true;\n  item.json.ejecucion_segura = true;\n  item.json.hora_resolucion = new Date().toISOString().slice(0,19).replace('T',' ');\n  return item;\n});"
+      },
+      "id": "riesgo-alto-06",
+      "name": "Riesgo alto - Cuarentena",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1930, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const deteccion = new Date(item.json.hora_deteccion.replace(' ','T'));\n  const resolucion = new Date(item.json.hora_resolucion.replace(' ','T'));\n  item.json.tiempo_respuesta_min = Number(((resolucion - deteccion) / 60000).toFixed(4));\n  item.json.estado_ejecucion = 'success';\n  return item;\n});"
+      },
+      "id": "metricas-06",
+      "name": "Calcular metricas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2200, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO certificados (bloque, remitente_email, tipo_certificado, score_riesgo, estado, fecha_solicitud, fecha_resolucion) VALUES ('{{$json.bloque}}', '{{$json.remitente_email}}', 'estudios', {{$json.score_riesgo}}, '{{$json.estado_certificado}}', '{{$json.hora_ingreso}}', '{{$json.hora_resolucion}}');"
+      },
+      "id": "mysql-certificado-06",
+      "name": "MySQL - Registrar certificado",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [2470, 100],
+      "credentials": {
+        "mySql": {
+          "id": "",
+          "name": "CEFIC MySQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO ejecuciones (flujo, proceso, escenario, inicio, fin, estado, incidente, activo_comprometido, ejecucion_segura) VALUES ('{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.hora_ingreso}}', '{{$json.hora_resolucion}}', '{{$json.estado_ejecucion}}', {{$json.categoria_sistema !== 'legitima' ? 1 : 0}}, {{$json.activo_comprometido ? 1 : 0}}, {{$json.ejecucion_segura ? 1 : 0}});"
+      },
+      "id": "mysql-ejecucion-06",
+      "name": "MySQL - Registrar ejecucion",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [2470, 240],
+      "credentials": {
+        "mySql": {
+          "id": "",
+          "name": "CEFIC MySQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO log_eventos (flujo, proceso, escenario, id_ejecucion, id_incidente, hora_ingreso, hora_deteccion, hora_resolucion, categoria, categoria_real, score_riesgo, nivel, accion_ejecutada, activo_comprometido, incidente_resuelto) VALUES ('{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.id_ejecucion}}', '{{$json.id_incidente}}', '{{$json.hora_ingreso}}', '{{$json.hora_deteccion}}', '{{$json.hora_resolucion}}', '{{$json.categoria_sistema}}', '{{$json.categoria_real}}', {{$json.score_riesgo}}, '{{$json.nivel}}', '{{$json.accion_ejecutada}}', {{$json.activo_comprometido ? 1 : 0}}, {{$json.incidente_resuelto ? 1 : 0}});"
+      },
+      "id": "mysql-evento-06",
+      "name": "MySQL - Registrar evento",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [2470, 380],
+      "credentials": {
+        "mySql": {
+          "id": "",
+          "name": "CEFIC MySQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO clasificaciones_amenazas (id_ejecucion, flujo, proceso, escenario, fecha_procesamiento, categoria_sistema, categoria_real, clasificacion_correcta, score_riesgo) VALUES ('{{$json.id_ejecucion}}', '{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.hora_deteccion}}', '{{$json.categoria_sistema}}', '{{$json.categoria_real}}', {{$json.clasificacion_correcta ? 1 : 0}}, {{$json.score_riesgo}});"
+      },
+      "id": "mysql-clasificacion-06",
+      "name": "MySQL - Registrar clasificacion",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [2470, 520],
+      "credentials": {
+        "mySql": {
+          "id": "",
+          "name": "CEFIC MySQL"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Inicio manual": {
+      "main": [[{
+        "node": "Generar solicitud de prueba",
+        "type": "main",
+        "index": 0
+      }]]
+    },
+    "Generar solicitud de prueba": {
+      "main": [[{
+        "node": "Validar remitente",
+        "type": "main",
+        "index": 0
+      }]]
+    },
+    "Validar remitente": {
+      "main": [[{
+        "node": "Filtrar entrada",
+        "type": "main",
+        "index": 0
+      }]]
+    },
+    "Filtrar entrada": {
+      "main": [[{
+        "node": "Preparar analisis IA",
+        "type": "main",
+        "index": 0
+      }]]
+    },
+    "Preparar analisis IA": {
+      "main": [[{
+        "node": "Groq - Analizar solicitud",
+        "type": "main",
+        "index": 0
+      }]]
+    },
+    "Groq - Analizar solicitud": {
+      "main": [[{
+        "node": "Procesar resultado de seguridad",
+        "type": "main",
+        "index": 0
+      }]]
+    },
+    "Procesar resultado de seguridad": {
+      "main": [[{
+        "node": "Enrutar segun riesgo",
+        "type": "main",
+        "index": 0
+      }]]
+    },
+    "Enrutar segun riesgo": {
+      "main": [
+        [{
+          "node": "Riesgo bajo - Procesar",
+          "type": "main",
+          "index": 0
+        }],
+        [{
+          "node": "Riesgo medio - Retener",
+          "type": "main",
+          "index": 0
+        }],
+        [{
+          "node": "Riesgo alto - Cuarentena",
+          "type": "main",
+          "index": 0
+        }]
+      ]
+    },
+    "Riesgo bajo - Procesar": {
+      "main": [[{
+        "node": "Calcular metricas",
+        "type": "main",
+        "index": 0
+      }]]
+    },
+    "Riesgo medio - Retener": {
+      "main": [[{
+        "node": "Calcular metricas",
+        "type": "main",
+        "index": 0
+      }]]
+    },
+    "Riesgo alto - Cuarentena": {
+      "main": [[{
+        "node": "Calcular metricas",
+        "type": "main",
+        "index": 0
+      }]]
+    },
+    "Calcular metricas": {
+      "main": [[
+        {
+          "node": "MySQL - Registrar certificado",
+          "type": "main",
+          "index": 0
+        },
+        {
+          "node": "MySQL - Registrar ejecucion",
+          "type": "main",
+          "index": 0
+        },
+        {
+          "node": "MySQL - Registrar evento",
+          "type": "main",
+          "index": 0
+        },
+        {
+          "node": "MySQL - Registrar clasificacion",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "pinData": {},
+  "versionId": "66666666-6666-4666-8666-666666666666",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

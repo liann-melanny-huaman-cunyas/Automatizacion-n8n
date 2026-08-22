@@ -1,0 +1,182 @@
+{
+  "name": "04 - Comunicados - SIN seguridad",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger-04",
+      "name": "Inicio manual",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ahora = new Date();\nconst ts = Date.now();\n\nconst fecha = ahora\n  .toISOString()\n  .slice(0, 19)\n  .replace('T', ' ');\n\nreturn [\n  {\n    json: {\n      id_ejecucion: 'COM-SIN-' + ts,\n      id_incidente: 'INC-COM-' + ts,\n\n      flujo: '04',\n      proceso: 'comunicados',\n      escenario: 'sin_seguridad',\n      bloque: 'sin_seguridad',\n\n      asunto: 'Comunicado institucional de prueba',\n      emisor: 'direccion.general@instituto.edu.pe',\n      destinatario: 'estudiantes@instituto.edu.pe',\n      cuerpo: 'Se comunica a los estudiantes que las actividades académicas continuarán con normalidad.',\n\n      estado_comunicado: 'enviado',\n      hora_ingreso: fecha\n    }\n  }\n];"
+      },
+      "id": "generar-comunicado-04",
+      "name": "Generar comunicado de prueba",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n\n  const datos = item.json;\n\n  // Escenario SIN seguridad:\n  // solo se realiza el procesamiento funcional del comunicado.\n  // No se aplican controles SOAR, score de riesgo,\n  // bloqueo ni respuesta automática de seguridad.\n\n  const completo = Boolean(\n    datos.asunto &&\n    datos.emisor &&\n    datos.destinatario &&\n    datos.cuerpo\n  );\n\n  datos.estado_comunicado = completo\n    ? 'enviado'\n    : 'cancelado';\n\n  datos.estado_ejecucion = completo\n    ? 'success'\n    : 'error';\n\n  datos.categoria_sistema = 'comunicado_institucional';\n  datos.categoria_real = 'comunicado_institucional';\n  datos.clasificacion_correcta = true;\n\n  datos.hora_procesamiento = new Date()\n    .toISOString()\n    .slice(0, 19)\n    .replace('T', ' ');\n\n  return item;\n});"
+      },
+      "id": "procesar-comunicado-04",
+      "name": "Procesar comunicado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO comunicados (bloque, asunto, emisor, destinatario, score_riesgo, estado, fecha_envio) VALUES ('{{$json.bloque}}', '{{$json.asunto}}', '{{$json.emisor}}', '{{$json.destinatario}}', NULL, '{{$json.estado_comunicado}}', '{{$json.hora_procesamiento}}');"
+      },
+      "id": "mysql-comunicado-04",
+      "name": "MySQL - Registrar comunicado",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        780,
+        80
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "",
+          "name": "CEFIC MySQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO ejecuciones (flujo, proceso, escenario, inicio, fin, estado, incidente, activo_comprometido, ejecucion_segura) VALUES ('{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.hora_ingreso}}', '{{$json.hora_procesamiento}}', '{{$json.estado_ejecucion}}', FALSE, FALSE, TRUE);"
+      },
+      "id": "mysql-ejecucion-04",
+      "name": "MySQL - Registrar ejecucion",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        780,
+        230
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "",
+          "name": "CEFIC MySQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO log_eventos (flujo, proceso, escenario, id_ejecucion, id_incidente, hora_ingreso, hora_deteccion, hora_resolucion, categoria, categoria_real, score_riesgo, nivel, accion_ejecutada, activo_comprometido, incidente_resuelto) VALUES ('{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.id_ejecucion}}', '{{$json.id_incidente}}', '{{$json.hora_ingreso}}', NULL, '{{$json.hora_procesamiento}}', '{{$json.categoria_sistema}}', '{{$json.categoria_real}}', NULL, NULL, 'Comunicado procesado sin controles SOAR', FALSE, TRUE);"
+      },
+      "id": "mysql-evento-04",
+      "name": "MySQL - Registrar evento",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        780,
+        380
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "",
+          "name": "CEFIC MySQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO clasificaciones_amenazas (id_ejecucion, flujo, proceso, escenario, fecha_procesamiento, categoria_sistema, categoria_real, clasificacion_correcta, score_riesgo) VALUES ('{{$json.id_ejecucion}}', '{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.hora_procesamiento}}', '{{$json.categoria_sistema}}', '{{$json.categoria_real}}', {{$json.clasificacion_correcta ? 1 : 0}}, NULL);"
+      },
+      "id": "mysql-clasificacion-04",
+      "name": "MySQL - Registrar clasificacion",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        780,
+        530
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "",
+          "name": "CEFIC MySQL"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Inicio manual": {
+      "main": [
+        [
+          {
+            "node": "Generar comunicado de prueba",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar comunicado de prueba": {
+      "main": [
+        [
+          {
+            "node": "Procesar comunicado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Procesar comunicado": {
+      "main": [
+        [
+          {
+            "node": "MySQL - Registrar comunicado",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "MySQL - Registrar ejecucion",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "MySQL - Registrar evento",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "MySQL - Registrar clasificacion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "pinData": {},
+  "versionId": "44444444-4444-4444-8444-444444444444",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
