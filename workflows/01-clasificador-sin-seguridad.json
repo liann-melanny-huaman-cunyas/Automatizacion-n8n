@@ -1,117 +1,231 @@
 {
-  "name": "01 - Clasificador de correos - SIN seguridad",
+  "name": "01 - Clasificador de correos - SIN seguridad - Gmail + Spam",
   "nodes": [
     {
-      "parameters": {},
-      "id": "manual-trigger-01",
-      "name": "Inicio manual",
-      "type": "n8n-nodes-base.manualTrigger",
-      "typeVersion": 1,
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "filters": {}
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.4,
       "position": [
-        0,
-        300
-      ]
+        -688,
+        944
+      ],
+      "id": "8b42502f-3aa7-4aa7-a4aa-adf4c9ce8de6",
+      "name": "Gmail Trigger - Bandeja",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "4bIGBnMe41ufO5Ej",
+          "name": "Gmail account"
+        }
+      }
     },
     {
       "parameters": {
-        "jsCode": "const ahora = new Date();\n\nreturn [\n  {\n    json: {\n      id_ejecucion: 'CLAS-SIN-' + Date.now(),\n      id_incidente: 'INC-' + Date.now(),\n      flujo: '01',\n      proceso: 'clasificador_correos',\n      escenario: 'sin_seguridad',\n      remitente: 'usuario@ejemplo.com',\n      asunto: 'Actualización urgente de contraseña',\n      cuerpo: 'Ingrese al siguiente enlace para actualizar inmediatamente su contraseña.',\n      categoria_real: 'phishing',\n      hora_ingreso: ahora.toISOString().slice(0, 19).replace('T', ' ')\n    }\n  }\n];"
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
       },
-      "id": "datos-prueba-01",
-      "name": "Generar correo de prueba",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -688,
+        1200
+      ],
+      "id": "7b04ef78-9b88-467f-9246-1d1ec3d23bf3",
+      "name": "Revisar Spam cada minuto"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "limit": 10,
+        "simple": false,
+        "filters": {
+          "q": "in:spam",
+          "readStatus": "unread"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -448,
+        1200
+      ],
+      "id": "a812097c-d4cd-425e-8788-2853c66d9851",
+      "name": "Gmail - Obtener Spam no leído",
+      "webhookId": "132e13a1-29c2-48f3-b92f-3bed423eead6",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "4bIGBnMe41ufO5Ej",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map((item, index) => {\n  const j = item.json || {};\n  const ahora = new Date();\n  const ts = Date.now();\n\n  const headers = Array.isArray(j.payload?.headers)\n    ? j.payload.headers\n    : [];\n\n  const getHeader = (name) => {\n    const h = headers.find(\n      x => String(x.name || '').toLowerCase() === name.toLowerCase()\n    );\n    return h?.value || '';\n  };\n\n  const remitente =\n    j.from ||\n    j.From ||\n    getHeader('From') ||\n    '';\n\n  const destinatario =\n    j.to ||\n    j.To ||\n    getHeader('To') ||\n    '';\n\n  const asunto =\n    j.subject ||\n    j.Subject ||\n    getHeader('Subject') ||\n    '(Sin asunto)';\n\n  let cuerpo =\n    j.textPlain ||\n    j.text ||\n    j.snippet ||\n    j.body ||\n    '';\n\n  // Si Gmail devuelve el mensaje completo y el texto no vino simplificado,\n  // intentamos recuperar text/plain del payload.\n  if (!cuerpo && Array.isArray(j.payload?.parts)) {\n    const plain = j.payload.parts.find(p => p.mimeType === 'text/plain');\n    if (plain?.body?.data) {\n      try {\n        cuerpo = Buffer\n          .from(plain.body.data.replace(/-/g, '+').replace(/_/g, '/'), 'base64')\n          .toString('utf8');\n      } catch (e) {\n        cuerpo = '';\n      }\n    }\n  }\n\n  if (!cuerpo && j.payload?.mimeType === 'text/plain' && j.payload?.body?.data) {\n    try {\n      cuerpo = Buffer\n        .from(j.payload.body.data.replace(/-/g, '+').replace(/_/g, '/'), 'base64')\n        .toString('utf8');\n    } catch (e) {\n      cuerpo = '';\n    }\n  }\n\n  const labels = Array.isArray(j.labelIds)\n    ? j.labelIds\n    : Array.isArray(j.labels)\n      ? j.labels.map(x => typeof x === 'string' ? x : x.id || x.name)\n      : [];\n\n  const origen_carpeta = labels.includes('SPAM') ? 'spam' : 'bandeja';\n\n  const fechaCorreo = j.internalDate\n    ? new Date(Number(j.internalDate))\n    : ahora;\n\n  return {\n    json: {\n      id_gmail: j.id || null,\n      thread_id_gmail: j.threadId || null,\n\n      id_ejecucion:\n        'CLAS-SIN-' +\n        ts +\n        '-' +\n        index +\n        '-' +\n        Math.random().toString(36).slice(2, 7),\n\n      id_incidente:\n        'INC-' +\n        ts +\n        '-' +\n        index +\n        '-' +\n        Math.random().toString(36).slice(2, 7),\n\n      flujo: '01',\n      proceso: 'clasificador_correos',\n      escenario: 'sin_seguridad',\n\n      origen_carpeta,\n      remitente,\n      destinatario,\n      asunto,\n      cuerpo,\n\n      // En correos reales la categoría real debe ser etiquetada\n      // posteriormente por el evaluador.\n      categoria_real: 'pendiente_validacion',\n\n      hora_ingreso: fechaCorreo\n        .toISOString()\n        .slice(0, 19)\n        .replace('T', ' ')\n    },\n    pairedItem: { item: index }\n  };\n});"
+      },
+      "id": "0f4bf4e0-dfba-4b56-b698-71e779a1e080",
+      "name": "Normalizar correo recibido",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        240,
-        300
+        -160,
+        1024
       ]
     },
     {
       "parameters": {
-        "jsCode": "return items.map(item => {\n  const texto = `${item.json.asunto} ${item.json.cuerpo}`.toLowerCase();\n\n  let categoria = 'legitimo';\n\n  const palabrasPhishing = [\n    'contraseña',\n    'password',\n    'urgente',\n    'actualizar inmediatamente',\n    'verifique su cuenta',\n    'enlace'\n  ];\n\n  const palabrasSpam = [\n    'oferta',\n    'promoción',\n    'gratis',\n    'descuento',\n    'premio'\n  ];\n\n  if (palabrasPhishing.some(p => texto.includes(p))) {\n    categoria = 'phishing';\n  } else if (palabrasSpam.some(p => texto.includes(p))) {\n    categoria = 'spam';\n  }\n\n  const deteccion = new Date();\n\n  item.json.categoria_sistema = categoria;\n  item.json.clasificacion_correcta = categoria === item.json.categoria_real;\n  item.json.hora_deteccion = deteccion.toISOString().slice(0, 19).replace('T', ' ');\n\n  return item;\n});"
+        "jsCode": "return items.map(item => {\n  const texto = `${item.json.asunto || ''} ${item.json.cuerpo || ''}`.toLowerCase();\n\n  let categoria = 'legitimo';\n\n  const palabrasPhishing = [\n    'contraseña',\n    'password',\n    'urgente',\n    'actualizar inmediatamente',\n    'verifique su cuenta',\n    'verificar su cuenta',\n    'enlace',\n    'credenciales',\n    'cuenta será bloqueada',\n    'cuenta sera bloqueada',\n    'inicie sesión',\n    'inicie sesion'\n  ];\n\n  const palabrasSpam = [\n    'oferta',\n    'promoción',\n    'promocion',\n    'gratis',\n    'descuento',\n    'premio',\n    'ganador'\n  ];\n\n  if (palabrasPhishing.some(p => texto.includes(p))) {\n    categoria = 'phishing';\n  } else if (palabrasSpam.some(p => texto.includes(p))) {\n    categoria = 'spam';\n  }\n\n  const deteccion = new Date();\n\n  item.json.categoria_sistema = categoria;\n\n  item.json.clasificacion_correcta =\n    item.json.categoria_real === 'pendiente_validacion'\n      ? null\n      : categoria === item.json.categoria_real;\n\n  item.json.hora_deteccion = deteccion\n    .toISOString()\n    .slice(0, 19)\n    .replace('T', ' ');\n\n  item.json.incidente = categoria !== 'legitimo';\n\n  // Escenario SIN seguridad:\n  // una amenaza puede ser detectada por reglas básicas,\n  // pero no existe una respuesta automática SOAR.\n  item.json.activo_comprometido = item.json.incidente;\n  item.json.ejecucion_segura = !item.json.incidente;\n  item.json.incidente_resuelto = !item.json.incidente;\n\n  return item;\n});"
       },
-      "id": "clasificacion-basica-01",
+      "id": "9cbbda84-0844-46c5-b465-08d8f61466d4",
       "name": "Clasificación básica",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        500,
-        300
+        112,
+        1024
       ]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO ejecuciones (flujo, proceso, escenario, inicio, fin, estado, incidente, activo_comprometido, ejecucion_segura) VALUES ('{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.hora_ingreso}}', NOW(), 'success', TRUE, TRUE, FALSE);"
+        "query": "INSERT INTO ejecuciones (flujo, proceso, escenario, inicio, fin, estado, incidente, activo_comprometido, ejecucion_segura) VALUES ('{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.hora_ingreso}}', NOW(), 'success', {{$json.incidente ? 1 : 0}}, {{$json.activo_comprometido ? 1 : 0}}, {{$json.ejecucion_segura ? 1 : 0}});",
+        "options": {}
       },
-      "id": "mysql-ejecucion-01",
+      "id": "fdb2fcd8-2802-4c0e-b7d7-4c58eaecf4dc",
       "name": "MySQL - Registrar ejecución",
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.4,
       "position": [
-        760,
-        160
+        416,
+        896
       ],
       "credentials": {
         "mySql": {
-          "id": "",
-          "name": "CEFIC MySQL"
+          "id": "0AwItBBVRQVA5cqG",
+          "name": "MySQL account"
         }
       }
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO clasificaciones_amenazas (id_ejecucion, flujo, proceso, escenario, fecha_procesamiento, categoria_sistema, categoria_real, clasificacion_correcta, score_riesgo) VALUES ('{{$json.id_ejecucion}}', '{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.hora_deteccion}}', '{{$json.categoria_sistema}}', '{{$json.categoria_real}}', {{$json.clasificacion_correcta ? 1 : 0}}, NULL);"
+        "query": "INSERT INTO clasificaciones_amenazas (\n    id_ejecucion,\n    flujo,\n    proceso,\n    escenario,\n    fecha_procesamiento,\n    categoria_sistema,\n    categoria_real,\n    clasificacion_correcta,\n    score_riesgo\n)\nVALUES (\n    '{{$json.id_ejecucion}}',\n    '{{$json.flujo}}',\n    '{{$json.proceso}}',\n    '{{$json.escenario}}',\n    '{{$json.hora_deteccion}}',\n    '{{$json.categoria_sistema}}',\n    '{{$json.categoria_real}}',\n    {{$json.clasificacion_correcta === null ? 0 : ($json.clasificacion_correcta ? 1 : 0)}},\n    NULL\n);",
+        "options": {}
       },
-      "id": "mysql-clasificacion-01",
+      "id": "f83e8a31-d6e9-47ae-acab-bc6c1cfc8524",
       "name": "MySQL - Registrar clasificación",
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.4,
       "position": [
-        760,
-        300
+        416,
+        1088
       ],
       "credentials": {
         "mySql": {
-          "id": "",
-          "name": "CEFIC MySQL"
+          "id": "0AwItBBVRQVA5cqG",
+          "name": "MySQL account"
         }
       }
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO log_eventos (flujo, proceso, escenario, id_ejecucion, id_incidente, hora_ingreso, hora_deteccion, hora_resolucion, categoria, categoria_real, score_riesgo, nivel, accion_ejecutada, activo_comprometido, incidente_resuelto) VALUES ('{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.id_ejecucion}}', '{{$json.id_incidente}}', '{{$json.hora_ingreso}}', '{{$json.hora_deteccion}}', NOW(), '{{$json.categoria_sistema}}', '{{$json.categoria_real}}', NULL, NULL, 'Sin respuesta automatizada', TRUE, TRUE);"
+        "query": "INSERT INTO log_eventos (flujo, proceso, escenario, id_ejecucion, id_incidente, hora_ingreso, hora_deteccion, hora_resolucion, categoria, categoria_real, score_riesgo, nivel, accion_ejecutada, activo_comprometido, incidente_resuelto) VALUES ('{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.id_ejecucion}}', '{{$json.id_incidente}}', '{{$json.hora_ingreso}}', '{{$json.hora_deteccion}}', NOW(), '{{$json.categoria_sistema}}', '{{$json.categoria_real}}', NULL, NULL, 'Sin respuesta automatizada', {{$json.activo_comprometido ? 1 : 0}}, {{$json.incidente_resuelto ? 1 : 0}});",
+        "options": {}
       },
-      "id": "mysql-evento-01",
+      "id": "0cfb6253-59dc-4ffd-ab71-64c42a495fb8",
       "name": "MySQL - Registrar evento",
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.4,
       "position": [
-        760,
-        440
+        416,
+        1280
       ],
       "credentials": {
         "mySql": {
-          "id": "",
-          "name": "CEFIC MySQL"
+          "id": "0AwItBBVRQVA5cqG",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "markAsRead",
+        "messageId": "={{ $json.id }}"
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -160,
+        1280
+      ],
+      "id": "910f359d-f1e7-4e11-b724-92d4ba59a768",
+      "name": "Gmail - Marcar Spam como leído",
+      "webhookId": "8b3b37a6-0198-4783-9a6c-7aeeac3f82db",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "4bIGBnMe41ufO5Ej",
+          "name": "Gmail account"
         }
       }
     }
   ],
+  "pinData": {},
   "connections": {
-    "Inicio manual": {
+    "Gmail Trigger - Bandeja": {
       "main": [
         [
           {
-            "node": "Generar correo de prueba",
+            "node": "Normalizar correo recibido",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Generar correo de prueba": {
+    "Revisar Spam cada minuto": {
+      "main": [
+        [
+          {
+            "node": "Gmail - Obtener Spam no leído",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail - Obtener Spam no leído": {
+      "main": [
+        [
+          {
+            "node": "Normalizar correo recibido",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Gmail - Marcar Spam como leído",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar correo recibido": {
       "main": [
         [
           {
@@ -144,14 +258,18 @@
       ]
     }
   },
+  "active": true,
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
   },
-  "active": false,
-  "pinData": {},
-  "versionId": "11111111-1111-4111-8111-111111111111",
+  "versionId": "41140062-d0cc-42bd-8c8c-d5cfe317b235",
   "meta": {
-    "templateCredsSetupCompleted": false
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2f2b321f02fd71546bee436db8be70efce30abb11bb8cd354546a706ab625298"
   },
+  "nodeGroups": [],
+  "id": "bIRqC5ix5CZNEMK8",
   "tags": []
 }

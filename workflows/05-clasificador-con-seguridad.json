@@ -1,74 +1,49 @@
 {
-  "name": "05 - Clasificador de correos - CON seguridad SOAR",
+  "name": "05 - Clasificador de correos - CON seguridad SOAR - Gmail + Spam + Etiquetas",
   "nodes": [
     {
-      "parameters": {},
-      "id": "manual-trigger-05",
-      "name": "Inicio manual",
-      "type": "n8n-nodes-base.manualTrigger",
-      "typeVersion": 1,
-      "position": [
-        0,
-        300
-      ]
-    },
-    {
       "parameters": {
-        "jsCode": "const ahora = new Date();\nconst ts = Date.now();\nconst fecha = ahora.toISOString().slice(0,19).replace('T',' ');\n\nreturn [{\n  json: {\n    id_ejecucion: 'CLAS-SEG-' + ts,\n    id_incidente: 'INC-CLAS-' + ts,\n    flujo: '05',\n    proceso: 'clasificador_correos',\n    escenario: 'con_seguridad',\n    remitente: 'externo.sospechoso@ejemplo.com',\n    asunto: 'URGENTE: actualice su contraseña',\n    cuerpo: 'Su cuenta será bloqueada. Ingrese al siguiente enlace para verificar su contraseña inmediatamente.',\n    categoria_real: 'phishing',\n    hora_ingreso: fecha\n  }\n}];"
+        "jsCode": "const listaBlanca = [\n  'secretaria.academica@instituto.edu.pe',\n  'direccion.general@instituto.edu.pe',\n  'coordinacion@instituto.edu.pe'\n];\n\nreturn items.map(item => {\n  const remitente = String(item.json.remitente || '').trim().toLowerCase();\n\n  item.json.remitente = remitente;\n  item.json.emisor_autorizado = listaBlanca.includes(remitente);\n  item.json.control_validacion_origen = true;\n\n  return item;\n});"
       },
-      "id": "correo-prueba-05",
-      "name": "Generar correo de prueba",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        220,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const listaBlanca = [\n  'secretaria.academica@instituto.edu.pe',\n  'direccion.general@instituto.edu.pe',\n  'coordinacion@instituto.edu.pe'\n];\n\nreturn items.map(item => {\n  const remitente = String(item.json.remitente || '').trim().toLowerCase();\n  item.json.remitente = remitente;\n  item.json.emisor_autorizado = listaBlanca.includes(remitente);\n  item.json.control_validacion_origen = true;\n  return item;\n});"
-      },
-      "id": "validar-remitente-05",
+      "id": "06811102-f456-482b-8e1a-4b575f98ed8d",
       "name": "Validar remitente",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        450,
-        300
+        -896,
+        1056
       ]
     },
     {
       "parameters": {
         "jsCode": "return items.map(item => {\n  const texto = `${item.json.asunto || ''} ${item.json.cuerpo || ''}`.toLowerCase();\n\n  const patrones = [\n    'contraseña',\n    'password',\n    'verifique su cuenta',\n    'actualice su cuenta',\n    'urgente',\n    'será bloqueada',\n    'sera bloqueada',\n    'ingrese al siguiente enlace',\n    'premio',\n    'transferencia',\n    'credenciales'\n  ];\n\n  const coincidencias = patrones.filter(p => texto.includes(p));\n\n  item.json.patrones_sospechosos = coincidencias;\n  item.json.contenido_sospechoso = coincidencias.length > 0;\n  item.json.control_filtrado = true;\n\n  return item;\n});"
       },
-      "id": "filtrar-contenido-05",
+      "id": "bca538c9-b0d5-4785-9d63-28e2b64b5fa3",
       "name": "Filtrar contenido",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        680,
-        300
+        -672,
+        1056
       ]
     },
     {
       "parameters": {
         "jsCode": "return items.map(item => {\n  item.json.prompt_groq = `Actúa como analista de ciberseguridad.\n\nAnaliza el siguiente correo institucional y clasifícalo únicamente como phishing, spam o legitimo.\n\nAsigna un score de riesgo entero entre 1 y 10.\n\nResponde EXCLUSIVAMENTE con JSON válido y sin markdown con esta estructura:\n{\"categoria\":\"phishing|spam|legitimo\",\"score\":1,\"justificacion\":\"texto breve\"}\n\nRemitente: ${item.json.remitente}\nRemitente autorizado: ${item.json.emisor_autorizado}\nAsunto: ${item.json.asunto}\nCuerpo: ${item.json.cuerpo}\nPatrones sospechosos: ${JSON.stringify(item.json.patrones_sospechosos)}`;\n\n  return item;\n});"
       },
-      "id": "preparar-prompt-05",
+      "id": "4e043ebe-7456-483c-b496-724edf50fe09",
       "name": "Preparar analisis IA",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        920,
-        300
+        -432,
+        1056
       ]
     },
     {
       "parameters": {
         "method": "POST",
         "url": "https://api.groq.com/openai/v1/chat/completions",
-        "authentication": "none",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -88,26 +63,26 @@
         "body": "={{ JSON.stringify({ model: 'openai/gpt-oss-20b', messages: [{ role: 'user', content: $json.prompt_groq }], temperature: 0.1 }) }}",
         "options": {}
       },
-      "id": "groq-05",
+      "id": "5b377737-922b-4ef6-89da-88b10acb5b80",
       "name": "Groq - Clasificar amenaza",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1170,
-        300
+        -176,
+        1056
       ]
     },
     {
       "parameters": {
-        "jsCode": "const original = $('Filtrar contenido').item.json;\n\nlet raw = '';\ntry {\n  raw = $json.choices[0].message.content;\n} catch (e) {\n  raw = '';\n}\n\nlet resultado;\ntry {\n  const limpio = String(raw)\n    .replace(/```json/gi, '')\n    .replace(/```/g, '')\n    .trim();\n  resultado = JSON.parse(limpio);\n} catch (e) {\n  resultado = {\n    categoria: 'indeterminado',\n    score: 5,\n    justificacion: 'No se pudo interpretar la respuesta del modelo.'\n  };\n}\n\nlet score = Number(resultado.score);\nif (!Number.isFinite(score)) score = 5;\nscore = Math.max(1, Math.min(10, Math.round(score)));\n\nif (original.emisor_autorizado === false) {\n  score = Math.max(score, 8);\n}\n\nif (original.contenido_sospechoso === true) {\n  score = Math.max(score, 7);\n}\n\nlet nivel = 'bajo';\nif (score >= 8) nivel = 'alto';\nelse if (score >= 4) nivel = 'medio';\n\nconst ahora = new Date();\nconst horaDeteccion = ahora.toISOString().slice(0,19).replace('T',' ');\nconst ingreso = new Date(original.hora_ingreso.replace(' ','T'));\nconst tiempoDeteccionMin = (ahora.getTime() - ingreso.getTime()) / 60000;\n\nconst categoriaSistema = String(resultado.categoria || 'indeterminado').toLowerCase();\n\nreturn [{\n  json: {\n    ...original,\n    categoria_sistema: categoriaSistema,\n    score_riesgo: score,\n    justificacion: resultado.justificacion || '',\n    nivel,\n    clasificacion_correcta: categoriaSistema === String(original.categoria_real || '').toLowerCase(),\n    hora_deteccion: horaDeteccion,\n    tiempo_deteccion_min: Number(tiempoDeteccionMin.toFixed(4)),\n    control_deteccion: true,\n    control_clasificacion: true,\n    control_score: true,\n    control_enrutamiento: true\n  }\n}];"
+        "jsCode": "const original = $('Filtrar contenido').item.json;\n\nlet raw = '';\ntry {\n  raw = $json.choices[0].message.content;\n} catch (e) {\n  raw = '';\n}\n\nlet resultado;\ntry {\n  const limpio = String(raw)\n    .replace(/```json/gi, '')\n    .replace(/```/g, '')\n    .trim();\n  resultado = JSON.parse(limpio);\n} catch (e) {\n  resultado = {\n    categoria: 'indeterminado',\n    score: 5,\n    justificacion: 'No se pudo interpretar la respuesta del modelo.'\n  };\n}\n\nlet score = Number(resultado.score);\nif (!Number.isFinite(score)) score = 5;\nscore = Math.max(1, Math.min(10, Math.round(score)));\n\nif (original.emisor_autorizado === false) {\n  score = Math.max(score, 8);\n}\n\nif (original.contenido_sospechoso === true) {\n  score = Math.max(score, 7);\n}\n\nlet nivel = 'bajo';\nif (score >= 8) nivel = 'alto';\nelse if (score >= 4) nivel = 'medio';\n\nconst ahora = new Date();\nconst horaDeteccion = ahora.toISOString().slice(0,19).replace('T',' ');\nconst ingreso = new Date(original.hora_ingreso.replace(' ','T'));\nconst tiempoDeteccionMin = (ahora.getTime() - ingreso.getTime()) / 60000;\n\nconst categoriaSistema = String(resultado.categoria || 'indeterminado').toLowerCase();\n\nreturn [{\n  json: {\n    ...original,\n    categoria_sistema: categoriaSistema,\n    score_riesgo: score,\n    justificacion: resultado.justificacion || '',\n    nivel,\n    clasificacion_correcta:\n      original.categoria_real === 'pendiente_validacion'\n        ? false\n        : categoriaSistema === String(original.categoria_real || '').toLowerCase(),\n    hora_deteccion: horaDeteccion,\n    tiempo_deteccion_min: Number(tiempoDeteccionMin.toFixed(4)),\n    control_deteccion: true,\n    control_clasificacion: true,\n    control_score: true,\n    control_enrutamiento: true\n  }\n}];"
       },
-      "id": "procesar-ia-05",
+      "id": "1a6b5045-b3aa-4691-9f4f-1584385101e1",
       "name": "Procesar resultado de seguridad",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1420,
-        300
+        80,
+        1056
       ]
     },
     {
@@ -118,7 +93,9 @@
               "conditions": {
                 "options": {
                   "caseSensitive": true,
-                  "typeValidation": "strict"
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
                 },
                 "conditions": [
                   {
@@ -139,7 +116,9 @@
               "conditions": {
                 "options": {
                   "caseSensitive": true,
-                  "typeValidation": "strict"
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
                 },
                 "conditions": [
                   {
@@ -160,7 +139,9 @@
               "conditions": {
                 "options": {
                   "caseSensitive": true,
-                  "typeValidation": "strict"
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
                 },
                 "conditions": [
                   {
@@ -181,151 +162,448 @@
         },
         "options": {}
       },
-      "id": "switch-riesgo-05",
+      "id": "14fd3723-ba18-4321-ba86-407bcbd5404c",
       "name": "Enrutar segun riesgo",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
       "position": [
-        1670,
-        300
+        336,
+        1056
       ]
     },
     {
       "parameters": {
         "jsCode": "return items.map(item => {\n  item.json.accion_ejecutada = 'Correo permitido';\n  item.json.activo_comprometido = false;\n  item.json.incidente_resuelto = true;\n  item.json.ejecucion_segura = true;\n  item.json.alerta_generada = false;\n  item.json.control_respuesta = true;\n  item.json.control_alerta = false;\n  item.json.control_bloqueo = false;\n  item.json.hora_resolucion = new Date().toISOString().slice(0,19).replace('T',' ');\n  return item;\n});"
       },
-      "id": "riesgo-bajo-05",
+      "id": "b149e14e-ab16-4764-80c6-7ba00f391241",
       "name": "Riesgo bajo - Permitir",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1930,
-        100
+        592,
+        864
       ]
     },
     {
       "parameters": {
         "jsCode": "return items.map(item => {\n  item.json.accion_ejecutada = 'Correo retenido para revision';\n  item.json.activo_comprometido = false;\n  item.json.incidente_resuelto = true;\n  item.json.ejecucion_segura = true;\n  item.json.alerta_generada = true;\n  item.json.control_respuesta = true;\n  item.json.control_alerta = true;\n  item.json.control_bloqueo = true;\n  item.json.hora_resolucion = new Date().toISOString().slice(0,19).replace('T',' ');\n  return item;\n});"
       },
-      "id": "riesgo-medio-05",
+      "id": "b6da276e-efa9-4345-a27d-f4c10a59e887",
       "name": "Riesgo medio - Retener",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1930,
-        300
+        592,
+        1056
       ]
     },
     {
       "parameters": {
         "jsCode": "return items.map(item => {\n  item.json.accion_ejecutada = 'Correo bloqueado automaticamente';\n  item.json.activo_comprometido = false;\n  item.json.incidente_resuelto = true;\n  item.json.ejecucion_segura = true;\n  item.json.alerta_generada = true;\n  item.json.control_respuesta = true;\n  item.json.control_alerta = true;\n  item.json.control_bloqueo = true;\n  item.json.hora_resolucion = new Date().toISOString().slice(0,19).replace('T',' ');\n  return item;\n});"
       },
-      "id": "riesgo-alto-05",
+      "id": "00304ee0-6a6a-4aed-95d2-4e1a94e579f5",
       "name": "Riesgo alto - Bloquear",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1930,
-        500
+        592,
+        1264
       ]
     },
     {
       "parameters": {
         "jsCode": "return items.map(item => {\n  const deteccion = new Date(item.json.hora_deteccion.replace(' ','T'));\n  const resolucion = new Date(item.json.hora_resolucion.replace(' ','T'));\n  const tiempo = (resolucion.getTime() - deteccion.getTime()) / 60000;\n\n  item.json.tiempo_respuesta_min = Number(tiempo.toFixed(4));\n  item.json.estado_ejecucion = 'success';\n  return item;\n});"
       },
-      "id": "metricas-finales-05",
+      "id": "7c5d7626-45a0-4a9c-a459-ed01817bb001",
       "name": "Calcular metricas",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2200,
-        300
+        864,
+        1056
       ]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO ejecuciones (flujo, proceso, escenario, inicio, fin, estado, incidente, activo_comprometido, ejecucion_segura) VALUES ('{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.hora_ingreso}}', '{{$json.hora_resolucion}}', '{{$json.estado_ejecucion}}', {{$json.categoria_sistema !== 'legitimo' ? 1 : 0}}, {{$json.activo_comprometido ? 1 : 0}}, {{$json.ejecucion_segura ? 1 : 0}});"
+        "query": "INSERT INTO ejecuciones (flujo, proceso, escenario, inicio, fin, estado, incidente, activo_comprometido, ejecucion_segura) VALUES ('{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.hora_ingreso}}', '{{$json.hora_resolucion}}', '{{$json.estado_ejecucion}}', {{$json.categoria_sistema !== 'legitimo' ? 1 : 0}}, {{$json.activo_comprometido ? 1 : 0}}, {{$json.ejecucion_segura ? 1 : 0}});",
+        "options": {}
       },
-      "id": "mysql-ejecucion-05",
+      "id": "cdc0c876-f0ad-4f39-98cf-99fb6ddb7691",
       "name": "MySQL - Registrar ejecucion",
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.4,
       "position": [
-        2470,
-        160
+        1232,
+        768
       ],
       "credentials": {
         "mySql": {
-          "id": "",
-          "name": "CEFIC MySQL"
+          "id": "0AwItBBVRQVA5cqG",
+          "name": "MySQL account"
         }
       }
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO log_eventos (flujo, proceso, escenario, id_ejecucion, id_incidente, hora_ingreso, hora_deteccion, hora_resolucion, categoria, categoria_real, score_riesgo, nivel, accion_ejecutada, activo_comprometido, incidente_resuelto) VALUES ('{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.id_ejecucion}}', '{{$json.id_incidente}}', '{{$json.hora_ingreso}}', '{{$json.hora_deteccion}}', '{{$json.hora_resolucion}}', '{{$json.categoria_sistema}}', '{{$json.categoria_real}}', {{$json.score_riesgo}}, '{{$json.nivel}}', '{{$json.accion_ejecutada}}', {{$json.activo_comprometido ? 1 : 0}}, {{$json.incidente_resuelto ? 1 : 0}});"
+        "query": "INSERT INTO log_eventos (flujo, proceso, escenario, id_ejecucion, id_incidente, hora_ingreso, hora_deteccion, hora_resolucion, categoria, categoria_real, score_riesgo, nivel, accion_ejecutada, activo_comprometido, incidente_resuelto) VALUES ('{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.id_ejecucion}}', '{{$json.id_incidente}}', '{{$json.hora_ingreso}}', '{{$json.hora_deteccion}}', '{{$json.hora_resolucion}}', '{{$json.categoria_sistema}}', '{{$json.categoria_real}}', {{$json.score_riesgo}}, '{{$json.nivel}}', '{{$json.accion_ejecutada}}', {{$json.activo_comprometido ? 1 : 0}}, {{$json.incidente_resuelto ? 1 : 0}});",
+        "options": {}
       },
-      "id": "mysql-evento-05",
+      "id": "afd58d49-df21-4968-9dc1-f0c3ae247877",
       "name": "MySQL - Registrar evento",
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.4,
       "position": [
-        2470,
-        300
+        1264,
+        1072
       ],
       "credentials": {
         "mySql": {
-          "id": "",
-          "name": "CEFIC MySQL"
+          "id": "0AwItBBVRQVA5cqG",
+          "name": "MySQL account"
         }
       }
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO clasificaciones_amenazas (id_ejecucion, flujo, proceso, escenario, fecha_procesamiento, categoria_sistema, categoria_real, clasificacion_correcta, score_riesgo) VALUES ('{{$json.id_ejecucion}}', '{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.hora_deteccion}}', '{{$json.categoria_sistema}}', '{{$json.categoria_real}}', {{$json.clasificacion_correcta ? 1 : 0}}, {{$json.score_riesgo}});"
+        "query": "INSERT INTO clasificaciones_amenazas (id_ejecucion, flujo, proceso, escenario, fecha_procesamiento, categoria_sistema, categoria_real, clasificacion_correcta, score_riesgo) VALUES ('{{$json.id_ejecucion}}', '{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.hora_deteccion}}', '{{$json.categoria_sistema}}', '{{$json.categoria_real}}', {{$json.clasificacion_correcta ? 1 : 0}}, {{$json.score_riesgo}});",
+        "options": {}
       },
-      "id": "mysql-clasificacion-05",
+      "id": "13c6c697-c777-4852-9e53-f60287fade45",
       "name": "MySQL - Registrar clasificacion",
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.4,
       "position": [
-        2470,
-        440
+        1216,
+        1456
       ],
       "credentials": {
         "mySql": {
-          "id": "",
-          "name": "CEFIC MySQL"
+          "id": "0AwItBBVRQVA5cqG",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "filters": {}
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -2400,
+        880
+      ],
+      "id": "9c7f7fe0-a3d8-494d-a61d-ed459eaa403b",
+      "name": "Gmail Trigger - Bandeja",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "4bIGBnMe41ufO5Ej",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 2
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -2400,
+        1200
+      ],
+      "id": "eb9150d6-81af-4770-839a-368d219a2710",
+      "name": "Revisar Spam cada 2 minutos"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "limit": 10,
+        "simple": false,
+        "filters": {
+          "q": "in:spam",
+          "readStatus": "unread"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -2176,
+        1200
+      ],
+      "id": "ac8df8d5-82ac-4277-93da-2a6a17de3d1f",
+      "name": "Gmail - Obtener Spam no leído",
+      "webhookId": "1e568db8-4c0b-460b-86d5-ac22c3df56aa",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "4bIGBnMe41ufO5Ej",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map((item, index) => {\n  const j = item.json || {};\n  const ahora = new Date();\n  const ts = Date.now();\n\n  const headers = Array.isArray(j.payload?.headers)\n    ? j.payload.headers\n    : [];\n\n  const getHeader = (name) => {\n    const h = headers.find(\n      x => String(x.name || '').toLowerCase() === name.toLowerCase()\n    );\n    return h?.value || '';\n  };\n\n  const fromRaw =\n    j.from ||\n    j.From ||\n    getHeader('From') ||\n    '';\n\n  const toRaw =\n    j.to ||\n    j.To ||\n    getHeader('To') ||\n    '';\n\n  const extraerEmail = (valor) => {\n    const texto = String(valor || '').trim();\n    const angle = texto.match(/<([^>]+)>/);\n    if (angle) return angle[1].trim().toLowerCase();\n\n    const email = texto.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/i);\n    return email ? email[0].toLowerCase() : texto.toLowerCase();\n  };\n\n  const remitente = extraerEmail(fromRaw);\n  const destinatario = extraerEmail(toRaw);\n\n  const asunto =\n    j.subject ||\n    j.Subject ||\n    getHeader('Subject') ||\n    '(Sin asunto)';\n\n  let cuerpo =\n    j.textPlain ||\n    j.text ||\n    j.snippet ||\n    j.body ||\n    '';\n\n  if (!cuerpo && Array.isArray(j.payload?.parts)) {\n    const plain = j.payload.parts.find(p => p.mimeType === 'text/plain');\n    if (plain?.body?.data) {\n      try {\n        cuerpo = Buffer\n          .from(plain.body.data.replace(/-/g, '+').replace(/_/g, '/'), 'base64')\n          .toString('utf8');\n      } catch (e) {\n        cuerpo = '';\n      }\n    }\n  }\n\n  if (!cuerpo && j.payload?.mimeType === 'text/plain' && j.payload?.body?.data) {\n    try {\n      cuerpo = Buffer\n        .from(j.payload.body.data.replace(/-/g, '+').replace(/_/g, '/'), 'base64')\n        .toString('utf8');\n    } catch (e) {\n      cuerpo = '';\n    }\n  }\n\n  const labels = Array.isArray(j.labelIds)\n    ? j.labelIds\n    : Array.isArray(j.labels)\n      ? j.labels.map(x => typeof x === 'string' ? x : (x.id || x.name))\n      : [];\n\n  const origen_carpeta = labels.includes('SPAM') ? 'spam' : 'bandeja';\n\n  // Ground truth opcional para pruebas controladas:\n  // ceficperu0+phishing@gmail.com\n  // ceficperu0+spam@gmail.com\n  // ceficperu0+legitimo@gmail.com\n  const destinoLower = String(toRaw || '').toLowerCase();\n  let categoria_real = 'pendiente_validacion';\n\n  if (destinoLower.includes('+phishing@')) {\n    categoria_real = 'phishing';\n  } else if (destinoLower.includes('+spam@')) {\n    categoria_real = 'spam';\n  } else if (destinoLower.includes('+legitimo@')) {\n    categoria_real = 'legitimo';\n  }\n\n  const fechaCorreo = j.internalDate\n    ? new Date(Number(j.internalDate))\n    : ahora;\n\n  return {\n    json: {\n      id_gmail: j.id || null,\n      thread_id_gmail: j.threadId || null,\n\n      id_ejecucion:\n        'CLAS-SEG-' +\n        ts +\n        '-' +\n        index +\n        '-' +\n        Math.random().toString(36).slice(2, 7),\n\n      id_incidente:\n        'INC-CLAS-' +\n        ts +\n        '-' +\n        index +\n        '-' +\n        Math.random().toString(36).slice(2, 7),\n\n      flujo: '05',\n      proceso: 'clasificador_correos',\n      escenario: 'con_seguridad',\n\n      origen_carpeta,\n      remitente,\n      destinatario,\n      asunto,\n      cuerpo,\n      categoria_real,\n\n      hora_ingreso: fechaCorreo\n        .toISOString()\n        .slice(0, 19)\n        .replace('T', ' ')\n    }\n  };\n});"
+      },
+      "id": "f19bc9f0-7cff-4ed7-8494-fed6ad775436",
+      "name": "Normalizar correo Gmail",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1920,
+        1008
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "addLabels",
+        "messageId": "={{ $json.id }}",
+        "labelIds": [
+          "Label_6274581067842967104"
+        ]
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -1920,
+        784
+      ],
+      "id": "7a05a439-8cc7-4055-baab-6e08256a171b",
+      "name": "Gmail - 01 Clasificador Nuevo - Bandeja",
+      "notesInFlow": true,
+      "webhookId": "622e9d74-613c-423f-914e-79f7114d2101",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "4bIGBnMe41ufO5Ej",
+          "name": "Gmail account"
+        }
+      },
+      "notes": "Seleccionar etiqueta: 01-Clasificador/Nuevo"
+    },
+    {
+      "parameters": {
+        "operation": "addLabels",
+        "messageId": "={{ $json.id }}",
+        "labelIds": [
+          "Label_6274581067842967104"
+        ]
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -1920,
+        1280
+      ],
+      "id": "98e74cae-09cf-42bf-91d4-7e7d1c01a3f6",
+      "name": "Gmail - 01 Clasificador Nuevo - Spam",
+      "notesInFlow": true,
+      "webhookId": "27e849cc-963e-444f-b0c0-58e752be9174",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "4bIGBnMe41ufO5Ej",
+          "name": "Gmail account"
+        }
+      },
+      "notes": "Seleccionar etiqueta: 01-Clasificador/Nuevo"
+    },
+    {
+      "parameters": {
+        "operation": "removeLabels",
+        "messageId": "={{ $json.id_gmail }}",
+        "labelIds": [
+          "Label_6274581067842967104"
+        ]
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1456,
+        1296
+      ],
+      "id": "56bcaebd-d3cf-4aea-abe2-cd7ca372cbff",
+      "name": "Gmail - Quitar 01 Clasificador Nuevo",
+      "notesInFlow": true,
+      "webhookId": "112eab98-766c-40de-9255-5db8ccaa3fa9",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "4bIGBnMe41ufO5Ej",
+          "name": "Gmail account"
+        }
+      },
+      "notes": "Seleccionar etiqueta: 01-Clasificador/Nuevo"
+    },
+    {
+      "parameters": {
+        "operation": "addLabels",
+        "messageId": "={{ $json.id }}",
+        "labelIds": [
+          "Label_6526752784224378319"
+        ]
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1712,
+        1296
+      ],
+      "id": "9f21f6d8-1c89-461a-bbe5-650d121aadbc",
+      "name": "Gmail - 01 Clasificador Procesado",
+      "notesInFlow": true,
+      "webhookId": "89b99f65-1452-458f-9bb0-978b797c66c8",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "4bIGBnMe41ufO5Ej",
+          "name": "Gmail account"
+        }
+      },
+      "notes": "Seleccionar etiqueta: 01-Clasificador/Procesado"
+    },
+    {
+      "parameters": {
+        "operation": "addLabels",
+        "messageId": "={{ $json.id_gmail }}",
+        "labelIds": [
+          "Label_840753811844160538"
+        ]
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1728,
+        736
+      ],
+      "id": "8f1ed94d-8c79-4f16-ba89-38fd6159b063",
+      "name": "Gmail - SEG Revisado",
+      "notesInFlow": true,
+      "webhookId": "47b2428f-5bce-4359-9f91-0d124f1ced11",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "4bIGBnMe41ufO5Ej",
+          "name": "Gmail account"
+        }
+      },
+      "notes": "Seleccionar etiqueta: SEG-Revisado"
+    },
+    {
+      "parameters": {
+        "operation": "addLabels",
+        "messageId": "={{ $json.id_gmail }}",
+        "labelIds": [
+          "Label_8394172735785524535"
+        ]
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        832,
+        736
+      ],
+      "id": "fe4ef158-40fc-4f6e-aca9-98f775c51852",
+      "name": "Gmail - SEG Amenaza Baja",
+      "notesInFlow": true,
+      "webhookId": "957b1f3c-16c5-4040-8a7a-d4267b464f3f",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "4bIGBnMe41ufO5Ej",
+          "name": "Gmail account"
+        }
+      },
+      "notes": "Seleccionar etiqueta: SEG-Amenaza-Baja"
+    },
+    {
+      "parameters": {
+        "operation": "addLabels",
+        "messageId": "={{ $json.id_gmail }}",
+        "labelIds": [
+          "Label_1009688719952584342"
+        ]
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        832,
+        1056
+      ],
+      "id": "d348bb68-8e7b-4c73-b650-a2aa8876b2b5",
+      "name": "Gmail - SEG Amenaza Media",
+      "notesInFlow": true,
+      "webhookId": "fcbb0887-24f6-4a58-a503-1cc6964c0aa0",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "4bIGBnMe41ufO5Ej",
+          "name": "Gmail account"
+        }
+      },
+      "notes": "Seleccionar etiqueta: SEG-Amenaza-Media"
+    },
+    {
+      "parameters": {
+        "operation": "addLabels",
+        "messageId": "={{ $json.id_gmail }}",
+        "labelIds": [
+          "Label_4152819756932871215"
+        ]
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        832,
+        1376
+      ],
+      "id": "f4245285-285f-4156-80ca-fc1ffd0fa343",
+      "name": "Gmail - SEG Amenaza Alta",
+      "notesInFlow": true,
+      "webhookId": "0794015f-ee21-4d1e-9a8c-ecd56c3f4724",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "4bIGBnMe41ufO5Ej",
+          "name": "Gmail account"
+        }
+      },
+      "notes": "Seleccionar etiqueta: SEG-Amenaza-Alta"
+    },
+    {
+      "parameters": {
+        "operation": "markAsRead",
+        "messageId": "={{ $json.id }}\n"
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1952,
+        1296
+      ],
+      "id": "5f34c3fe-6708-45e6-9a34-7a4efe2346ca",
+      "name": "Gmail - Marcar como leído",
+      "webhookId": "5c58a9d6-bddb-4766-8e34-c7d0c9d00329",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "4bIGBnMe41ufO5Ej",
+          "name": "Gmail account"
         }
       }
     }
   ],
+  "pinData": {},
   "connections": {
-    "Inicio manual": {
-      "main": [
-        [
-          {
-            "node": "Generar correo de prueba",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Generar correo de prueba": {
-      "main": [
-        [
-          {
-            "node": "Validar remitente",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Validar remitente": {
       "main": [
         [
@@ -413,6 +691,11 @@
             "node": "Calcular metricas",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Gmail - SEG Amenaza Baja",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -424,6 +707,11 @@
             "node": "Calcular metricas",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Gmail - SEG Amenaza Media",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -433,6 +721,11 @@
         [
           {
             "node": "Calcular metricas",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Gmail - SEG Amenaza Alta",
             "type": "main",
             "index": 0
           }
@@ -456,19 +749,108 @@
             "node": "MySQL - Registrar clasificacion",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Gmail - Quitar 01 Clasificador Nuevo",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Gmail - SEG Revisado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail Trigger - Bandeja": {
+      "main": [
+        [
+          {
+            "node": "Normalizar correo Gmail",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Gmail - 01 Clasificador Nuevo - Bandeja",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Revisar Spam cada 2 minutos": {
+      "main": [
+        [
+          {
+            "node": "Gmail - Obtener Spam no leído",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail - Obtener Spam no leído": {
+      "main": [
+        [
+          {
+            "node": "Normalizar correo Gmail",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Gmail - 01 Clasificador Nuevo - Spam",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar correo Gmail": {
+      "main": [
+        [
+          {
+            "node": "Validar remitente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail - Quitar 01 Clasificador Nuevo": {
+      "main": [
+        [
+          {
+            "node": "Gmail - 01 Clasificador Procesado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail - 01 Clasificador Procesado": {
+      "main": [
+        [
+          {
+            "node": "Gmail - Marcar como leído",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
     }
   },
+  "active": true,
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
   },
-  "active": false,
-  "pinData": {},
-  "versionId": "55555555-5555-4555-8555-555555555555",
+  "versionId": "1a05a9e1-b1d1-4136-b4ca-1cdead5c0ea1",
   "meta": {
-    "templateCredsSetupCompleted": false
+    "instanceId": "2f2b321f02fd71546bee436db8be70efce30abb11bb8cd354546a706ab625298"
   },
+  "nodeGroups": [],
+  "id": "GGILg3pR7Gy4JZmA",
   "tags": []
 }

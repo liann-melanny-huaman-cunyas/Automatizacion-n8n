@@ -555,3 +555,5 @@ caso de estudio. CEFIC no corresponde al nombre de la plataforma SOAR ni
 al nombre de los workflows; es la organización sobre cuyos procesos se
 realiza la comparación experimental antes y después de integrar
 controles de seguridad SOAR.
+git config --global user.name
+git config --global user.email
