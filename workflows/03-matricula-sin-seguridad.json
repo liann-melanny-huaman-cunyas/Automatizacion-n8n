@@ -1,148 +1,261 @@
 {
-  "name": "03 - Matricula - SIN seguridad",
+  "name": "03 - Matricula - SIN seguridad - Formulario existente o nuevo",
   "nodes": [
     {
-      "parameters": {},
-      "id": "manual-trigger-03",
-      "name": "Inicio manual",
-      "type": "n8n-nodes-base.manualTrigger",
-      "typeVersion": 1,
+      "parameters": {
+        "formTitle": "Solicitud de matrícula - CEFIC",
+        "formDescription": "Ingrese DNI y correo. Si ya está registrado, el sistema recuperará sus datos. Si es nuevo, complete también nombres y programa académico.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "DNI",
+              "fieldName": "dni",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Correo electrónico",
+              "fieldName": "correo",
+              "fieldType": "email",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Nombres y apellidos (solo si es estudiante nuevo)",
+              "fieldName": "nombres_apellidos",
+              "fieldType": "text",
+              "requiredField": false
+            },
+            {
+              "fieldLabel": "Programa académico (solo si es estudiante nuevo)",
+              "fieldName": "programa_academico",
+              "fieldType": "text",
+              "requiredField": false
+            },
+            {
+              "fieldLabel": "Periodo académico",
+              "fieldName": "periodo_academico",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Curso / actividad",
+              "fieldName": "curso",
+              "fieldType": "text",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "form-trigger-03",
+      "name": "Formulario - Solicitud matricula",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.5,
       "position": [
-        0,
-        300
-      ]
+        -1160,
+        260
+      ],
+      "webhookId": "matricula-sin-seguridad-form"
     },
     {
       "parameters": {
-        "jsCode": "const ahora = new Date();\nconst ts = Date.now();\n\nconst fecha = ahora\n  .toISOString()\n  .slice(0, 19)\n  .replace('T', ' ');\n\nreturn [\n  {\n    json: {\n      id_ejecucion: 'MAT-SIN-' + ts,\n      id_incidente: 'INC-MAT-' + ts,\n\n      flujo: '03',\n      proceso: 'matricula',\n      escenario: 'sin_seguridad',\n      bloque: 'sin_seguridad',\n\n      codigo_estudiante: 'EST-' + ts,\n      nombre_estudiante: 'Estudiante de prueba',\n      programa_academico: 'Ingenieria de Sistemas',\n      periodo_academico: '2026-II',\n      curso: 'Seguridad Informatica',\n\n      estado_matricula: 'pendiente',\n\n      hora_ingreso: fecha\n    }\n  }\n];"
+        "jsCode": "return items.map(item => {\n  const d = item.json || {};\n\n  const esc = (v) => String(v ?? '')\n    .trim()\n    .replace(/\\\\/g, '\\\\\\\\')\n    .replace(/'/g, \"''\");\n\n  return {\n    json: {\n      dni: String(d.dni || '').trim(),\n      correo: String(d.correo || '').trim().toLowerCase(),\n      nombres_form: String(d.nombres_apellidos || '').trim(),\n      programa_form: String(d.programa_academico || '').trim(),\n      periodo_academico: String(d.periodo_academico || '').trim(),\n      curso: String(d.curso || '').trim(),\n\n      dni_sql: esc(d.dni),\n      correo_sql: esc(String(d.correo || '').toLowerCase()),\n      nombres_form_sql: esc(d.nombres_apellidos),\n      programa_form_sql: esc(d.programa_academico),\n      periodo_sql: esc(d.periodo_academico),\n      curso_sql: esc(d.curso)\n    }\n  };\n});"
       },
-      "id": "generar-matricula-03",
-      "name": "Generar matricula de prueba",
+      "id": "preparar-busqueda-03",
+      "name": "Preparar busqueda estudiante",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        250,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "return items.map(item => {\n\n  const datos = item.json;\n\n  // Escenario SIN seguridad:\n  // solamente se comprueba que existan los datos funcionales\n  // necesarios para procesar la matrícula.\n  // No constituye un control de seguridad SOAR.\n\n  const completo = Boolean(\n    datos.codigo_estudiante &&\n    datos.nombre_estudiante &&\n    datos.programa_academico &&\n    datos.periodo_academico &&\n    datos.curso\n  );\n\n  datos.estado_matricula = completo\n    ? 'procesada'\n    : 'rechazada';\n\n  datos.estado_ejecucion = completo\n    ? 'success'\n    : 'error';\n\n  datos.categoria_sistema = 'registro_matricula';\n  datos.categoria_real = 'registro_matricula';\n  datos.clasificacion_correcta = true;\n\n  datos.hora_procesamiento = new Date()\n    .toISOString()\n    .slice(0, 19)\n    .replace('T', ' ');\n\n  return item;\n});"
-      },
-      "id": "procesar-matricula-03",
-      "name": "Procesar matricula",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        500,
-        300
+        -900,
+        260
       ]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO matriculas (codigo_estudiante, nombre_estudiante, programa_academico, periodo_academico, curso, estado_matricula, bloque, score_riesgo, nivel, accion_ejecutada, fecha_registro, fecha_procesamiento) VALUES ('{{$json.codigo_estudiante}}', '{{$json.nombre_estudiante}}', '{{$json.programa_academico}}', '{{$json.periodo_academico}}', '{{$json.curso}}', '{{$json.estado_matricula}}', '{{$json.bloque}}', NULL, NULL, 'Registro procesado sin controles SOAR', '{{$json.hora_ingreso}}', '{{$json.hora_procesamiento}}');"
+        "query": "SELECT\n  CASE WHEN e.id IS NULL THEN 0 ELSE 1 END AS estudiante_encontrado,\n  COALESCE(e.id, 0) AS estudiante_id,\n  COALESCE(e.codigo_estudiante, '') AS codigo_estudiante_bd,\n  COALESCE(e.dni, '{{$json.dni_sql}}') AS dni,\n  COALESCE(e.nombres_apellidos, '') AS nombre_estudiante_bd,\n  COALESCE(e.correo, '{{$json.correo_sql}}') AS correo,\n  COALESCE(e.programa_academico, '') AS programa_academico_bd,\n\n  '{{$json.nombres_form_sql}}' AS nombres_form,\n  '{{$json.programa_form_sql}}' AS programa_form,\n  '{{$json.periodo_sql}}' AS periodo_academico,\n  '{{$json.curso_sql}}' AS curso\n\nFROM (SELECT 1 AS dummy) base\nLEFT JOIN estudiantes e\n  ON e.dni = '{{$json.dni_sql}}'\n AND LOWER(e.correo) = LOWER('{{$json.correo_sql}}')\n AND e.estado = 'activo'\nLIMIT 1;",
+        "options": {}
+      },
+      "id": "mysql-buscar-estudiante-03",
+      "name": "MySQL - Buscar estudiante",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        -640,
+        260
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "0AwItBBVRQVA5cqG",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const d = item.json || {};\n  const ahora = new Date();\n  const ts = Date.now();\n  const fecha = ahora.toISOString().slice(0,19).replace('T',' ');\n\n  const encontrado = Number(d.estudiante_encontrado || 0) === 1;\n\n  const codigo = encontrado\n    ? String(d.codigo_estudiante_bd || '').trim()\n    : 'EST-' + ts;\n\n  const nombre = encontrado\n    ? String(d.nombre_estudiante_bd || '').trim()\n    : String(d.nombres_form || '').trim();\n\n  const programa = encontrado\n    ? String(d.programa_academico_bd || '').trim()\n    : String(d.programa_form || '').trim();\n\n  const dni = String(d.dni || '').trim();\n  const correo = String(d.correo || '').trim().toLowerCase();\n  const periodo = String(d.periodo_academico || '').trim();\n  const curso = String(d.curso || '').trim();\n\n  const datosNuevoCompletos = encontrado || Boolean(nombre && programa);\n  const completo = Boolean(dni && correo && nombre && programa && periodo && curso && datosNuevoCompletos);\n\n  const esc = (v) => String(v ?? '')\n    .replace(/\\\\/g, '\\\\\\\\')\n    .replace(/'/g, \"''\");\n\n  return {\n    json: {\n      estudiante_encontrado: encontrado,\n      estudiante_nuevo: !encontrado,\n      registro_valido: completo,\n\n      id_ejecucion: 'MAT-SIN-' + ts + '-' + Math.random().toString(36).slice(2,7),\n      id_incidente: 'INC-MAT-' + ts + '-' + Math.random().toString(36).slice(2,7),\n\n      flujo: '03',\n      proceso: 'matricula',\n      escenario: 'sin_seguridad',\n      bloque: 'sin_seguridad',\n\n      codigo_estudiante: codigo,\n      dni,\n      correo,\n      nombre_estudiante: nombre,\n      programa_academico: programa,\n      periodo_academico: periodo,\n      curso,\n\n      estado_matricula: completo ? 'procesada' : 'rechazada',\n      estado_ejecucion: completo ? 'success' : 'error',\n\n      categoria_sistema: completo\n        ? (encontrado ? 'matricula_estudiante_existente' : 'matricula_estudiante_nuevo')\n        : 'registro_incompleto',\n\n      categoria_real: 'pendiente_validacion',\n      clasificacion_correcta: false,\n      score_riesgo: null,\n      nivel: null,\n\n      accion_ejecutada: completo\n        ? (encontrado\n            ? 'Matrícula procesada para estudiante registrado sin controles SOAR'\n            : 'Nuevo estudiante registrado y matrícula procesada sin controles SOAR')\n        : 'Matrícula rechazada por datos incompletos',\n\n      hora_ingreso: fecha,\n      hora_procesamiento: fecha,\n\n      codigo_sql: esc(codigo),\n      dni_sql: esc(dni),\n      correo_sql: esc(correo),\n      nombre_sql: esc(nombre),\n      programa_sql: esc(programa),\n      periodo_sql: esc(periodo),\n      curso_sql: esc(curso)\n    }\n  };\n});"
+      },
+      "id": "procesar-03",
+      "name": "Preparar matricula",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -380,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO estudiantes (\n  codigo_estudiante,\n  dni,\n  nombres_apellidos,\n  correo,\n  programa_academico,\n  estado\n)\nSELECT\n  '{{$json.codigo_sql}}',\n  '{{$json.dni_sql}}',\n  '{{$json.nombre_sql}}',\n  '{{$json.correo_sql}}',\n  '{{$json.programa_sql}}',\n  'activo'\nWHERE {{$json.estudiante_nuevo ? 1 : 0}} = 1\n  AND {{$json.registro_valido ? 1 : 0}} = 1;",
+        "options": {}
+      },
+      "id": "mysql-registrar-estudiante-03",
+      "name": "MySQL - Registrar estudiante nuevo",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        -80,
+        260
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "0AwItBBVRQVA5cqG",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO matriculas (\n  codigo_estudiante,\n  nombre_estudiante,\n  programa_academico,\n  periodo_academico,\n  curso,\n  estado_matricula,\n  bloque,\n  score_riesgo,\n  nivel,\n  accion_ejecutada,\n  fecha_registro,\n  fecha_procesamiento\n)\nSELECT\n  '{{$json.codigo_sql}}',\n  '{{$json.nombre_sql}}',\n  '{{$json.programa_sql}}',\n  '{{$json.periodo_sql}}',\n  '{{$json.curso_sql}}',\n  '{{$json.estado_matricula}}',\n  'sin_seguridad',\n  NULL,\n  NULL,\n  '{{$json.accion_ejecutada}}',\n  '{{$json.hora_ingreso}}',\n  '{{$json.hora_procesamiento}}'\nWHERE {{$json.registro_valido ? 1 : 0}} = 1;",
+        "options": {}
       },
       "id": "mysql-matricula-03",
       "name": "MySQL - Registrar matricula",
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.4,
       "position": [
-        780,
-        100
+        240,
+        40
       ],
       "credentials": {
         "mySql": {
-          "id": "",
-          "name": "CEFIC MySQL"
+          "id": "0AwItBBVRQVA5cqG",
+          "name": "MySQL account"
         }
       }
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO ejecuciones (flujo, proceso, escenario, inicio, fin, estado, incidente, activo_comprometido, ejecucion_segura) VALUES ('{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.hora_ingreso}}', '{{$json.hora_procesamiento}}', '{{$json.estado_ejecucion}}', FALSE, FALSE, TRUE);"
+        "query": "INSERT INTO ejecuciones (\n  flujo, proceso, escenario, inicio, fin, estado,\n  incidente, activo_comprometido, ejecucion_segura\n) VALUES (\n  '{{$json.flujo}}',\n  '{{$json.proceso}}',\n  '{{$json.escenario}}',\n  '{{$json.hora_ingreso}}',\n  '{{$json.hora_procesamiento}}',\n  '{{$json.estado_ejecucion}}',\n  FALSE,\n  FALSE,\n  FALSE\n);",
+        "options": {}
       },
       "id": "mysql-ejecucion-03",
       "name": "MySQL - Registrar ejecucion",
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.4,
       "position": [
-        780,
-        240
+        240,
+        200
       ],
       "credentials": {
         "mySql": {
-          "id": "",
-          "name": "CEFIC MySQL"
+          "id": "0AwItBBVRQVA5cqG",
+          "name": "MySQL account"
         }
       }
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO log_eventos (flujo, proceso, escenario, id_ejecucion, id_incidente, hora_ingreso, hora_deteccion, hora_resolucion, categoria, categoria_real, score_riesgo, nivel, accion_ejecutada, activo_comprometido, incidente_resuelto) VALUES ('{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.id_ejecucion}}', '{{$json.id_incidente}}', '{{$json.hora_ingreso}}', NULL, '{{$json.hora_procesamiento}}', '{{$json.categoria_sistema}}', '{{$json.categoria_real}}', NULL, NULL, 'Procesamiento funcional sin controles SOAR', FALSE, TRUE);"
+        "query": "INSERT INTO log_eventos (\n  flujo, proceso, escenario, id_ejecucion, id_incidente,\n  hora_ingreso, hora_deteccion, hora_resolucion,\n  categoria, categoria_real, score_riesgo, nivel,\n  accion_ejecutada, activo_comprometido, incidente_resuelto\n) VALUES (\n  '{{$json.flujo}}',\n  '{{$json.proceso}}',\n  '{{$json.escenario}}',\n  '{{$json.id_ejecucion}}',\n  '{{$json.id_incidente}}',\n  '{{$json.hora_ingreso}}',\n  NULL,\n  '{{$json.hora_procesamiento}}',\n  '{{$json.categoria_sistema}}',\n  '{{$json.categoria_real}}',\n  NULL,\n  NULL,\n  '{{$json.accion_ejecutada}}',\n  FALSE,\n  TRUE\n);",
+        "options": {}
       },
       "id": "mysql-evento-03",
       "name": "MySQL - Registrar evento",
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.4,
       "position": [
-        780,
-        380
+        240,
+        360
       ],
       "credentials": {
         "mySql": {
-          "id": "",
-          "name": "CEFIC MySQL"
+          "id": "0AwItBBVRQVA5cqG",
+          "name": "MySQL account"
         }
       }
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO clasificaciones_amenazas (id_ejecucion, flujo, proceso, escenario, fecha_procesamiento, categoria_sistema, categoria_real, clasificacion_correcta, score_riesgo) VALUES ('{{$json.id_ejecucion}}', '{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.hora_procesamiento}}', '{{$json.categoria_sistema}}', '{{$json.categoria_real}}', {{$json.clasificacion_correcta ? 1 : 0}}, NULL);"
+        "query": "INSERT INTO clasificaciones_amenazas (\n  id_ejecucion, flujo, proceso, escenario,\n  fecha_procesamiento, categoria_sistema,\n  categoria_real, clasificacion_correcta, score_riesgo\n) VALUES (\n  '{{$json.id_ejecucion}}',\n  '{{$json.flujo}}',\n  '{{$json.proceso}}',\n  '{{$json.escenario}}',\n  '{{$json.hora_procesamiento}}',\n  '{{$json.categoria_sistema}}',\n  '{{$json.categoria_real}}',\n  0,\n  NULL\n);",
+        "options": {}
       },
       "id": "mysql-clasificacion-03",
       "name": "MySQL - Registrar clasificacion",
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.4,
       "position": [
-        780,
+        240,
         520
       ],
       "credentials": {
         "mySql": {
-          "id": "",
-          "name": "CEFIC MySQL"
+          "id": "0AwItBBVRQVA5cqG",
+          "name": "MySQL account"
         }
       }
     }
   ],
   "connections": {
-    "Inicio manual": {
+    "Formulario - Solicitud matricula": {
       "main": [
         [
           {
-            "node": "Generar matricula de prueba",
+            "node": "Preparar busqueda estudiante",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Generar matricula de prueba": {
+    "Preparar busqueda estudiante": {
       "main": [
         [
           {
-            "node": "Procesar matricula",
+            "node": "MySQL - Buscar estudiante",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Procesar matricula": {
+    "MySQL - Buscar estudiante": {
+      "main": [
+        [
+          {
+            "node": "Preparar matricula",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar matricula": {
+      "main": [
+        [
+          {
+            "node": "MySQL - Registrar estudiante nuevo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MySQL - Registrar estudiante nuevo": {
       "main": [
         [
           {
@@ -174,9 +287,9 @@
   },
   "active": false,
   "pinData": {},
-  "versionId": "33333333-3333-4333-8333-333333333333",
+  "versionId": "03-matricula-existente-nuevo-v2",
   "meta": {
-    "templateCredsSetupCompleted": false
+    "templateCredsSetupCompleted": true
   },
   "tags": []
 }

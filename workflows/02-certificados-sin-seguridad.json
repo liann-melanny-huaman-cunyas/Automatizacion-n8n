@@ -1,148 +1,192 @@
 {
-  "name": "02 - Certificados - SIN seguridad",
+  "name": "02 - Certificados - SIN seguridad - Formulario",
   "nodes": [
     {
-      "parameters": {},
-      "id": "manual-trigger-02",
-      "name": "Inicio manual",
-      "type": "n8n-nodes-base.manualTrigger",
-      "typeVersion": 1,
+      "parameters": {
+        "formTitle": "Solicitud de certificado - CEFIC",
+        "formDescription": "Complete sus datos para registrar una solicitud de certificado en CEFIC-Perú Centro Peruano de Formación e Investigación Continua.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Nombres y apellidos",
+              "fieldName": "nombres_apellidos",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Correo electrónico",
+              "fieldName": "correo",
+              "fieldType": "email",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "DNI",
+              "fieldName": "dni",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Tipo de actividad",
+              "fieldName": "tipo_actividad",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "seminario"
+                  },
+                  {
+                    "option": "curso"
+                  },
+                  {
+                    "option": "diplomado"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Nombre del curso, seminario o diplomado",
+              "fieldName": "nombre_actividad",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Periodo",
+              "fieldName": "periodo",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Observaciones",
+              "fieldName": "observaciones",
+              "fieldType": "textarea",
+              "requiredField": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "829f8fa8-f866-440a-9781-edf7d934c9dd",
+      "name": "Formulario - Solicitud certificado",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.5,
       "position": [
-        0,
-        300
-      ]
+        -900,
+        260
+      ],
+      "webhookId": "edf5a41f-c9ca-4b3f-ad6f-86f74272c5df"
     },
     {
       "parameters": {
-        "jsCode": "const ahora = new Date();\nconst ts = Date.now();\n\nreturn [\n  {\n    json: {\n      id_ejecucion: 'CERT-SIN-' + ts,\n      id_incidente: 'INC-CERT-' + ts,\n      flujo: '02',\n      proceso: 'certificados',\n      escenario: 'sin_seguridad',\n      bloque: 'sin_seguridad',\n      remitente_email: 'estudiante.prueba@instituto.edu.pe',\n      asunto: 'Solicitud de certificado de estudios',\n      cuerpo: 'Solicito mi certificado de estudios correspondiente al periodo académico actual.',\n      hora_ingreso: ahora.toISOString().slice(0, 19).replace('T', ' ')\n    }\n  }\n];"
+        "jsCode": "return items.map(item => {\n  const d = item.json || {};\n  const ahora = new Date();\n  const ts = Date.now();\n  const fecha = ahora.toISOString().slice(0,19).replace('T',' ');\n\n  const nombre = String(d.nombres_apellidos || '').trim();\n  const correo = String(d.correo || '').trim().toLowerCase();\n  const dni = String(d.dni || '').trim();\n  const tipoActividad = String(d.tipo_actividad || '').trim().toLowerCase();\n  const nombreActividad = String(d.nombre_actividad || '').trim();\n  const periodo = String(d.periodo || '').trim();\n  const observaciones = String(d.observaciones || '').trim();\n\n  const completo = Boolean(\n    nombre &&\n    correo &&\n    dni &&\n    tipoActividad &&\n    nombreActividad &&\n    periodo\n  );\n\n  return {\n    json: {\n      id_ejecucion: 'CERT-SIN-' + ts + '-' + Math.random().toString(36).slice(2,7),\n      id_incidente: 'INC-CERT-' + ts + '-' + Math.random().toString(36).slice(2,7),\n\n      flujo: '02',\n      proceso: 'certificados',\n      escenario: 'sin_seguridad',\n      bloque: 'sin_seguridad',\n\n      nombres_apellidos: nombre,\n      remitente_email: correo,\n      dni: dni,\n      tipo_actividad: tipoActividad,\n      nombre_actividad: nombreActividad,\n      periodo: periodo,\n      observaciones: observaciones,\n\n      tipo_certificado: 'certificado',\n      score_riesgo: null,\n\n      estado_certificado: completo ? 'pendiente' : 'rechazado',\n      estado_ejecucion: completo ? 'success' : 'error',\n\n      categoria_sistema: 'sin_clasificacion_seguridad',\n      categoria_real: 'pendiente_validacion',\n      clasificacion_correcta: false,\n\n      hora_ingreso: fecha,\n      hora_procesamiento: fecha\n    }\n  };\n});"
       },
-      "id": "generar-solicitud-02",
-      "name": "Generar solicitud de prueba",
+      "id": "af37d19f-37a5-4df3-8990-8f18a25640eb",
+      "name": "Preparar solicitud",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        250,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "return items.map(item => {\n  const texto = `${item.json.asunto || ''} ${item.json.cuerpo || ''}`.toLowerCase();\n\n  let tipo = 'no_identificado';\n\n  if (texto.includes('estudios')) {\n    tipo = 'estudios';\n  } else if (texto.includes('notas')) {\n    tipo = 'notas';\n  } else if (texto.includes('egresado')) {\n    tipo = 'egresado';\n  }\n\n  item.json.tipo_certificado = tipo;\n  item.json.estado_certificado = 'pendiente';\n  item.json.categoria_sistema = tipo;\n  item.json.categoria_real = tipo;\n  item.json.clasificacion_correcta = true;\n  item.json.hora_procesamiento = new Date()\n    .toISOString()\n    .slice(0, 19)\n    .replace('T', ' ');\n\n  return item;\n});"
-      },
-      "id": "extraer-tipo-02",
-      "name": "Extraer tipo certificado",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        500,
-        300
+        -620,
+        260
       ]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO certificados (bloque, remitente_email, tipo_certificado, score_riesgo, estado, fecha_solicitud, fecha_resolucion) VALUES ('{{$json.bloque}}', '{{$json.remitente_email}}', '{{$json.tipo_certificado}}', NULL, '{{$json.estado_certificado}}', '{{$json.hora_ingreso}}', NULL);"
+        "query": "INSERT INTO certificados (\n    bloque,\n    remitente_email,\n    nombres_apellidos,\n    dni,\n    tipo_actividad,\n    nombre_actividad,\n    periodo,\n    observaciones,\n    tipo_certificado,\n    score_riesgo,\n    estado,\n    fecha_solicitud,\n    fecha_resolucion\n)\nVALUES (\n    '{{$json.bloque}}',\n    '{{$json.remitente_email}}',\n    '{{$json.nombres_apellidos}}',\n    '{{$json.dni}}',\n    '{{$json.tipo_actividad}}',\n    '{{$json.nombre_actividad}}',\n    '{{$json.periodo}}',\n    '{{$json.observaciones}}',\n    '{{$json.tipo_certificado}}',\n    NULL,\n    '{{$json.estado_certificado}}',\n    '{{$json.hora_ingreso}}',\n    NULL\n);",
+        "options": {}
       },
-      "id": "mysql-certificado-02",
+      "id": "a3e4d811-6a73-4831-9285-821d02dba301",
       "name": "MySQL - Registrar certificado",
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.4,
       "position": [
-        780,
-        100
+        -300,
+        60
       ],
       "credentials": {
         "mySql": {
-          "id": "",
-          "name": "CEFIC MySQL"
+          "id": "0AwItBBVRQVA5cqG",
+          "name": "MySQL account"
         }
       }
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO ejecuciones (flujo, proceso, escenario, inicio, fin, estado, incidente, activo_comprometido, ejecucion_segura) VALUES ('{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.hora_ingreso}}', '{{$json.hora_procesamiento}}', 'success', FALSE, FALSE, TRUE);"
+        "query": "INSERT INTO ejecuciones (\n    flujo,\n    proceso,\n    escenario,\n    inicio,\n    fin,\n    estado,\n    incidente,\n    activo_comprometido,\n    ejecucion_segura\n)\nVALUES (\n    '{{$json.flujo}}',\n    '{{$json.proceso}}',\n    '{{$json.escenario}}',\n    '{{$json.hora_ingreso}}',\n    '{{$json.hora_procesamiento}}',\n    '{{$json.estado_ejecucion}}',\n    FALSE,\n    FALSE,\n    TRUE\n);",
+        "options": {}
       },
-      "id": "mysql-ejecucion-02",
-      "name": "MySQL - Registrar ejecución",
+      "id": "4c53b6d7-0379-42e1-b701-a43bea5c7e5e",
+      "name": "MySQL - Registrar ejecucion",
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.4,
       "position": [
-        780,
-        240
+        -300,
+        220
       ],
       "credentials": {
         "mySql": {
-          "id": "",
-          "name": "CEFIC MySQL"
+          "id": "0AwItBBVRQVA5cqG",
+          "name": "MySQL account"
         }
       }
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO log_eventos (flujo, proceso, escenario, id_ejecucion, id_incidente, hora_ingreso, hora_deteccion, hora_resolucion, categoria, categoria_real, score_riesgo, nivel, accion_ejecutada, activo_comprometido, incidente_resuelto) VALUES ('{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.id_ejecucion}}', '{{$json.id_incidente}}', '{{$json.hora_ingreso}}', NULL, '{{$json.hora_procesamiento}}', 'solicitud_certificado', 'solicitud_certificado', NULL, NULL, 'Solicitud registrada sin controles SOAR', FALSE, TRUE);"
+        "query": "INSERT INTO log_eventos (\n    flujo,\n    proceso,\n    escenario,\n    id_ejecucion,\n    id_incidente,\n    hora_ingreso,\n    hora_deteccion,\n    hora_resolucion,\n    categoria,\n    categoria_real,\n    score_riesgo,\n    nivel,\n    accion_ejecutada,\n    activo_comprometido,\n    incidente_resuelto\n)\nVALUES (\n    '{{$json.flujo}}',\n    '{{$json.proceso}}',\n    '{{$json.escenario}}',\n    '{{$json.id_ejecucion}}',\n    '{{$json.id_incidente}}',\n    '{{$json.hora_ingreso}}',\n    NULL,\n    '{{$json.hora_procesamiento}}',\n    '{{$json.categoria_sistema}}',\n    '{{$json.categoria_real}}',\n    NULL,\n    NULL,\n    'Solicitud recibida mediante formulario sin controles SOAR',\n    FALSE,\n    TRUE\n);",
+        "options": {}
       },
-      "id": "mysql-evento-02",
+      "id": "bcd58244-a60f-4d0e-90ef-9a72df5f125e",
       "name": "MySQL - Registrar evento",
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.4,
       "position": [
-        780,
+        -300,
         380
       ],
       "credentials": {
         "mySql": {
-          "id": "",
-          "name": "CEFIC MySQL"
+          "id": "0AwItBBVRQVA5cqG",
+          "name": "MySQL account"
         }
       }
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO clasificaciones_amenazas (id_ejecucion, flujo, proceso, escenario, fecha_procesamiento, categoria_sistema, categoria_real, clasificacion_correcta, score_riesgo) VALUES ('{{$json.id_ejecucion}}', '{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.hora_procesamiento}}', '{{$json.categoria_sistema}}', '{{$json.categoria_real}}', {{$json.clasificacion_correcta ? 1 : 0}}, NULL);"
+        "query": "INSERT INTO clasificaciones_amenazas (\n    id_ejecucion,\n    flujo,\n    proceso,\n    escenario,\n    fecha_procesamiento,\n    categoria_sistema,\n    categoria_real,\n    clasificacion_correcta,\n    score_riesgo\n)\nVALUES (\n    '{{$json.id_ejecucion}}',\n    '{{$json.flujo}}',\n    '{{$json.proceso}}',\n    '{{$json.escenario}}',\n    '{{$json.hora_procesamiento}}',\n    '{{$json.categoria_sistema}}',\n    '{{$json.categoria_real}}',\n    0,\n    NULL\n);",
+        "options": {}
       },
-      "id": "mysql-clasificacion-02",
-      "name": "MySQL - Registrar clasificación",
+      "id": "0b7ab8a5-eab5-4565-b4ad-fc620f493c96",
+      "name": "MySQL - Registrar clasificacion",
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.4,
       "position": [
-        780,
-        520
+        -300,
+        540
       ],
       "credentials": {
         "mySql": {
-          "id": "",
-          "name": "CEFIC MySQL"
+          "id": "0AwItBBVRQVA5cqG",
+          "name": "MySQL account"
         }
       }
     }
   ],
   "connections": {
-    "Inicio manual": {
+    "Formulario - Solicitud certificado": {
       "main": [
         [
           {
-            "node": "Generar solicitud de prueba",
+            "node": "Preparar solicitud",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Generar solicitud de prueba": {
-      "main": [
-        [
-          {
-            "node": "Extraer tipo certificado",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Extraer tipo certificado": {
+    "Preparar solicitud": {
       "main": [
         [
           {
@@ -151,7 +195,7 @@
             "index": 0
           },
           {
-            "node": "MySQL - Registrar ejecución",
+            "node": "MySQL - Registrar ejecucion",
             "type": "main",
             "index": 0
           },
@@ -161,7 +205,7 @@
             "index": 0
           },
           {
-            "node": "MySQL - Registrar clasificación",
+            "node": "MySQL - Registrar clasificacion",
             "type": "main",
             "index": 0
           }
@@ -174,9 +218,9 @@
   },
   "active": false,
   "pinData": {},
-  "versionId": "22222222-2222-4222-8222-222222222222",
+  "versionId": "d85c1d80-4f81-4fab-bb94-9dbaf0edc002",
   "meta": {
-    "templateCredsSetupCompleted": false
+    "templateCredsSetupCompleted": true
   },
   "tags": []
 }

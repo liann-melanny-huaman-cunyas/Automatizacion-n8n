@@ -1,59 +1,137 @@
 {
-  "name": "06 - Certificados - CON seguridad SOAR",
+  "name": "06 - Certificados - CON seguridad SOAR - Formulario",
   "nodes": [
     {
-      "parameters": {},
-      "id": "manual-trigger-06",
-      "name": "Inicio manual",
-      "type": "n8n-nodes-base.manualTrigger",
-      "typeVersion": 1,
-      "position": [0, 300]
+      "parameters": {
+        "formTitle": "Solicitud de certificado - CEFIC",
+        "formDescription": "Complete sus datos para solicitar su certificado en CEFIC-Perú Centro Peruano de Formación e Investigación Continua.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Nombres y apellidos",
+              "fieldName": "nombres_apellidos",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Correo electrónico",
+              "fieldName": "correo",
+              "fieldType": "email",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "DNI",
+              "fieldName": "dni",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Tipo de actividad",
+              "fieldName": "tipo_actividad",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "seminario"
+                  },
+                  {
+                    "option": "curso"
+                  },
+                  {
+                    "option": "diplomado"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Nombre del curso, seminario o diplomado",
+              "fieldName": "nombre_actividad",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Periodo",
+              "fieldName": "periodo",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Observaciones",
+              "fieldName": "observaciones",
+              "fieldType": "textarea",
+              "requiredField": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cdf04a0b-7910-4239-8318-b9eea1014219",
+      "name": "Formulario - Solicitud certificado",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.5,
+      "position": [
+        288,
+        944
+      ],
+      "webhookId": "770f3229-6f31-445c-86c6-eeb0279b35c9"
     },
     {
       "parameters": {
-        "jsCode": "const ahora = new Date();\nconst ts = Date.now();\nconst fecha = ahora.toISOString().slice(0,19).replace('T',' ');\n\nreturn [{\n  json: {\n    id_ejecucion: 'CERT-SEG-' + ts,\n    id_incidente: 'INC-CERT-' + ts,\n    flujo: '06',\n    proceso: 'certificados',\n    escenario: 'con_seguridad',\n    bloque: 'con_seguridad',\n    remitente_email: 'externo.sospechoso@ejemplo.com',\n    asunto: 'Solicitud urgente de certificado de estudios',\n    cuerpo: 'Solicito certificado de estudios. Favor procesar urgentemente y enviar al correo indicado.',\n    categoria_real: 'solicitud_sospechosa',\n    hora_ingreso: fecha\n  }\n}];"
+        "jsCode": "return items.map((item, index) => {\n  const d = item.json || {};\n  const ahora = new Date();\n  const ts = Date.now();\n  const fecha = ahora.toISOString().slice(0,19).replace('T',' ');\n\n  const nombre = String(d.nombres_apellidos || '').trim();\n  const correo = String(d.correo || '').trim().toLowerCase();\n  const dni = String(d.dni || '').trim();\n  const tipoActividad = String(d.tipo_actividad || '').trim().toLowerCase();\n  const nombreActividad = String(d.nombre_actividad || '').trim();\n  const periodo = String(d.periodo || '').trim();\n  const observaciones = String(d.observaciones || '').trim();\n\n  return {\n    json: {\n      id_ejecucion:\n        'CERT-SEG-' + ts + '-' + index + '-' + Math.random().toString(36).slice(2,7),\n      id_incidente:\n        'INC-CERT-' + ts + '-' + index + '-' + Math.random().toString(36).slice(2,7),\n\n      flujo: '06',\n      proceso: 'certificados',\n      escenario: 'con_seguridad',\n      bloque: 'con_seguridad',\n      origen_solicitud: 'formulario_cefic',\n\n      nombres_apellidos: nombre,\n      remitente_email: correo,\n      dni,\n      tipo_actividad: tipoActividad,\n      nombre_actividad: nombreActividad,\n      periodo,\n      observaciones,\n\n      tipo_certificado: 'certificado',\n      categoria_real: 'pendiente_validacion',\n\n      hora_ingreso: fecha\n    }\n  };\n});"
       },
-      "id": "solicitud-prueba-06",
-      "name": "Generar solicitud de prueba",
+      "id": "adbdd1d4-b8d4-4ff2-b78d-9519cbe002f1",
+      "name": "Preparar solicitud segura",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 300]
+      "position": [
+        544,
+        944
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const listaBlanca = [\n  'secretaria.academica@instituto.edu.pe',\n  'direccion.general@instituto.edu.pe',\n  'coordinacion@instituto.edu.pe'\n];\n\nreturn items.map(item => {\n  const remitente = String(item.json.remitente_email || '').trim().toLowerCase();\n  item.json.remitente_email = remitente;\n  item.json.emisor_autorizado = listaBlanca.includes(remitente);\n  item.json.control_validacion_origen = true;\n  return item;\n});"
+        "jsCode": "return items.map(item => {\n  const j = item.json;\n\n  const emailValido = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(String(j.remitente_email || ''));\n  const dniValido = /^\\d{8}$/.test(String(j.dni || ''));\n  const actividadValida = ['seminario', 'curso', 'diplomado'].includes(\n    String(j.tipo_actividad || '').toLowerCase()\n  );\n\n  const camposCompletos = Boolean(\n    j.nombres_apellidos &&\n    j.remitente_email &&\n    j.dni &&\n    j.tipo_actividad &&\n    j.nombre_actividad &&\n    j.periodo\n  );\n\n  const longitudesValidas =\n    String(j.nombres_apellidos || '').length <= 150 &&\n    String(j.remitente_email || '').length <= 150 &&\n    String(j.dni || '').length <= 20 &&\n    String(j.nombre_actividad || '').length <= 200 &&\n    String(j.periodo || '').length <= 50 &&\n    String(j.observaciones || '').length <= 2000;\n\n  item.json.email_valido = emailValido;\n  item.json.dni_valido = dniValido;\n  item.json.actividad_valida = actividadValida;\n  item.json.campos_completos = camposCompletos;\n  item.json.longitudes_validas = longitudesValidas;\n\n  item.json.origen_valido =\n    j.origen_solicitud === 'formulario_cefic' &&\n    emailValido;\n\n  item.json.entrada_valida =\n    camposCompletos &&\n    dniValido &&\n    actividadValida &&\n    longitudesValidas;\n\n  item.json.control_validacion_origen = true;\n  return item;\n});"
       },
-      "id": "validar-remitente-06",
-      "name": "Validar remitente",
+      "id": "9c82345d-d9bc-409b-a6d8-92b50a714544",
+      "name": "Validar origen y datos",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [450, 300]
+      "position": [
+        800,
+        944
+      ]
     },
     {
       "parameters": {
-        "jsCode": "return items.map(item => {\n  const texto = `${item.json.asunto || ''} ${item.json.cuerpo || ''}`.toLowerCase();\n\n  const patrones = [\n    'urgente',\n    'enviar al correo',\n    'procesar inmediatamente',\n    'adjunto',\n    'credencial',\n    'contraseña',\n    'modificar datos',\n    'cambiar destinatario'\n  ];\n\n  const coincidencias = patrones.filter(p => texto.includes(p));\n\n  item.json.patrones_sospechosos = coincidencias;\n  item.json.contenido_sospechoso = coincidencias.length > 0;\n  item.json.control_filtrado = true;\n\n  return item;\n});"
+        "jsCode": "return items.map(item => {\n  const j = item.json;\n\n  const texto = [\n    j.nombres_apellidos,\n    j.remitente_email,\n    j.dni,\n    j.tipo_actividad,\n    j.nombre_actividad,\n    j.periodo,\n    j.observaciones\n  ].map(v => String(v || '')).join(' ').toLowerCase();\n\n  const patrones = [\n    { nombre: 'script_html', regex: /<\\s*script\\b|javascript\\s*:/i },\n    { nombre: 'sql_union', regex: /\\bunion\\s+select\\b/i },\n    { nombre: 'sql_drop', regex: /\\bdrop\\s+table\\b/i },\n    { nombre: 'sql_tautologia', regex: /(?:'|\")?\\s*or\\s+1\\s*=\\s*1/i },\n    { nombre: 'comentario_sql', regex: /--\\s|\\/\\*/i },\n    { nombre: 'path_traversal', regex: /\\.\\.\\//i }\n  ];\n\n  const coincidencias = patrones\n    .filter(p => p.regex.test(texto))\n    .map(p => p.nombre);\n\n  item.json.patrones_sospechosos = coincidencias;\n  item.json.contenido_sospechoso = coincidencias.length > 0;\n  item.json.control_filtrado = true;\n\n  return item;\n});"
       },
-      "id": "filtrar-entrada-06",
+      "id": "de74f69d-47db-46ad-a465-25d34fd66d5d",
       "name": "Filtrar entrada",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [680, 300]
+      "position": [
+        1056,
+        944
+      ]
     },
     {
       "parameters": {
-        "jsCode": "return items.map(item => {\n  item.json.prompt_groq = `Actúa como analista de ciberseguridad.\n\nAnaliza la siguiente solicitud de certificado y clasifícala como legitima o solicitud_sospechosa.\n\nAsigna un score de riesgo entero entre 1 y 10.\n\nResponde EXCLUSIVAMENTE con JSON válido:\n{\"categoria\":\"legitima|solicitud_sospechosa\",\"score\":1,\"justificacion\":\"texto breve\"}\n\nRemitente: ${item.json.remitente_email}\nRemitente autorizado: ${item.json.emisor_autorizado}\nAsunto: ${item.json.asunto}\nCuerpo: ${item.json.cuerpo}\nPatrones sospechosos: ${JSON.stringify(item.json.patrones_sospechosos)}`;\n\n  return item;\n});"
+        "jsCode": "return items.map(item => {\n  item.json.prompt_groq = `Actúa como analista de ciberseguridad para CEFIC-Perú.\n\nAnaliza una solicitud de certificado recibida mediante formulario web.\n\nClasifica la solicitud ÚNICAMENTE como:\n- legitima\n- solicitud_sospechosa\n\nAsigna un score de riesgo entero entre 1 y 10.\n\nConsidera:\n- consistencia de los datos;\n- patrones de inyección o contenido malicioso;\n- anomalías en los campos;\n- observaciones sospechosas;\n- resultado de las validaciones previas.\n\nUn correo externo NO es sospechoso por sí solo, porque los alumnos pueden usar correos personales.\n\nResponde EXCLUSIVAMENTE con JSON válido:\n{\"categoria\":\"legitima|solicitud_sospechosa\",\"score\":1,\"justificacion\":\"texto breve\"}\n\nDatos:\nNombres y apellidos: ${item.json.nombres_apellidos}\nCorreo: ${item.json.remitente_email}\nDNI: ${item.json.dni}\nTipo de actividad: ${item.json.tipo_actividad}\nNombre de actividad: ${item.json.nombre_actividad}\nPeriodo: ${item.json.periodo}\nObservaciones: ${item.json.observaciones || '(sin observaciones)'}\nOrigen válido: ${item.json.origen_valido}\nEntrada válida: ${item.json.entrada_valida}\nPatrones sospechosos: ${JSON.stringify(item.json.patrones_sospechosos)}`;\n\n  return item;\n});"
       },
-      "id": "preparar-prompt-06",
+      "id": "4637dd5b-c8ef-469c-a621-a52d5c6715c0",
       "name": "Preparar analisis IA",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [920, 300]
+      "position": [
+        1312,
+        944
+      ]
     },
     {
       "parameters": {
         "method": "POST",
         "url": "https://api.groq.com/openai/v1/chat/completions",
-        "authentication": "none",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -73,21 +151,27 @@
         "body": "={{ JSON.stringify({ model: 'openai/gpt-oss-20b', messages: [{ role: 'user', content: $json.prompt_groq }], temperature: 0.1 }) }}",
         "options": {}
       },
-      "id": "groq-06",
+      "id": "eab6a8a6-fc24-41e3-ab78-922dbd34bdc7",
       "name": "Groq - Analizar solicitud",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1170, 300]
+      "position": [
+        1568,
+        944
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const original = $('Filtrar entrada').item.json;\n\nlet raw = '';\ntry {\n  raw = $json.choices[0].message.content;\n} catch (e) {\n  raw = '';\n}\n\nlet resultado;\ntry {\n  resultado = JSON.parse(String(raw).replace(/```json/gi,'').replace(/```/g,'').trim());\n} catch (e) {\n  resultado = {\n    categoria: 'solicitud_sospechosa',\n    score: 5,\n    justificacion: 'No se pudo interpretar la respuesta del modelo.'\n  };\n}\n\nlet score = Number(resultado.score);\nif (!Number.isFinite(score)) score = 5;\nscore = Math.max(1, Math.min(10, Math.round(score)));\n\nif (original.emisor_autorizado === false) score = Math.max(score, 8);\nif (original.contenido_sospechoso === true) score = Math.max(score, 7);\n\nlet nivel = 'bajo';\nif (score >= 8) nivel = 'alto';\nelse if (score >= 4) nivel = 'medio';\n\nconst ahora = new Date();\nconst horaDeteccion = ahora.toISOString().slice(0,19).replace('T',' ');\nconst ingreso = new Date(original.hora_ingreso.replace(' ','T'));\nconst tiempoDeteccion = (ahora.getTime() - ingreso.getTime()) / 60000;\n\nconst categoriaSistema = String(resultado.categoria || 'solicitud_sospechosa').toLowerCase();\n\nreturn [{\n  json: {\n    ...original,\n    categoria_sistema: categoriaSistema,\n    score_riesgo: score,\n    nivel,\n    justificacion: resultado.justificacion || '',\n    clasificacion_correcta: categoriaSistema === String(original.categoria_real || '').toLowerCase(),\n    hora_deteccion: horaDeteccion,\n    tiempo_deteccion_min: Number(tiempoDeteccion.toFixed(4)),\n    control_deteccion: true,\n    control_clasificacion: true,\n    control_score: true,\n    control_enrutamiento: true\n  }\n}];"
+        "jsCode": "const original = $('Filtrar entrada').item.json;\n\nlet raw = '';\ntry {\n  raw = $json.choices[0].message.content;\n} catch (e) {\n  raw = '';\n}\n\nlet resultado;\ntry {\n  resultado = JSON.parse(\n    String(raw)\n      .replace(/```json/gi,'')\n      .replace(/```/g,'')\n      .trim()\n  );\n} catch (e) {\n  resultado = {\n    categoria: 'solicitud_sospechosa',\n    score: 5,\n    justificacion: 'No se pudo interpretar la respuesta del modelo.'\n  };\n}\n\nlet categoriaSistema = String(\n  resultado.categoria || 'solicitud_sospechosa'\n).trim().toLowerCase();\n\nif (!['legitima', 'solicitud_sospechosa'].includes(categoriaSistema)) {\n  categoriaSistema = 'solicitud_sospechosa';\n}\n\nlet score = Number(resultado.score);\nif (!Number.isFinite(score)) score = 5;\nscore = Math.max(1, Math.min(10, Math.round(score)));\n\nif (original.origen_valido !== true) {\n  score = Math.min(10, score + 2);\n}\n\nif (original.entrada_valida !== true) {\n  score = Math.min(10, score + 2);\n}\n\nif (original.contenido_sospechoso === true) {\n  score = Math.min(10, score + 3);\n  categoriaSistema = 'solicitud_sospechosa';\n}\n\nlet nivel = 'bajo';\nif (score >= 8) nivel = 'alto';\nelse if (score >= 4) nivel = 'medio';\n\nconst ahora = new Date();\nconst horaDeteccion = ahora.toISOString().slice(0,19).replace('T',' ');\nconst ingreso = new Date(original.hora_ingreso.replace(' ','T'));\nconst tiempoDeteccion = (ahora.getTime() - ingreso.getTime()) / 60000;\n\nconst categoriaReal = String(\n  original.categoria_real || 'pendiente_validacion'\n).toLowerCase();\n\nreturn [{\n  json: {\n    ...original,\n    categoria_sistema: categoriaSistema,\n    score_riesgo: score,\n    nivel,\n    justificacion: String(resultado.justificacion || ''),\n    clasificacion_correcta:\n      categoriaReal === 'pendiente_validacion'\n        ? false\n        : categoriaSistema === categoriaReal,\n    hora_deteccion: horaDeteccion,\n    tiempo_deteccion_min: Number(tiempoDeteccion.toFixed(4)),\n    control_deteccion: true,\n    control_clasificacion: true,\n    control_score: true,\n    control_enrutamiento: true\n  }\n}];"
       },
-      "id": "procesar-resultado-06",
+      "id": "53f73b6c-9d7d-4ef9-a938-298db64eaaca",
       "name": "Procesar resultado de seguridad",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1420, 300]
+      "position": [
+        1824,
+        944
+      ]
     },
     {
       "parameters": {
@@ -104,7 +188,14 @@
                       "operation": "equals"
                     }
                   }
-                ]
+                ],
+                "combinator": "and",
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                }
               },
               "renameOutput": true,
               "outputKey": "bajo"
@@ -120,7 +211,14 @@
                       "operation": "equals"
                     }
                   }
-                ]
+                ],
+                "combinator": "and",
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                }
               },
               "renameOutput": true,
               "outputKey": "medio"
@@ -136,7 +234,14 @@
                       "operation": "equals"
                     }
                   }
-                ]
+                ],
+                "combinator": "and",
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                }
               },
               "renameOutput": true,
               "outputKey": "alto"
@@ -145,244 +250,327 @@
         },
         "options": {}
       },
-      "id": "switch-riesgo-06",
+      "id": "40f4a145-7793-4249-abe7-eebdfe5a0ccb",
       "name": "Enrutar segun riesgo",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
-      "position": [1670, 300]
+      "position": [
+        2080,
+        944
+      ]
     },
     {
       "parameters": {
-        "jsCode": "return items.map(item => {\n  item.json.estado_certificado = 'aprobado';\n  item.json.accion_ejecutada = 'Solicitud procesada';\n  item.json.activo_comprometido = false;\n  item.json.incidente_resuelto = true;\n  item.json.ejecucion_segura = true;\n  item.json.hora_resolucion = new Date().toISOString().slice(0,19).replace('T',' ');\n  return item;\n});"
+        "jsCode": "return items.map(item => {\n  item.json.estado_certificado = 'aprobado';\n  item.json.accion_ejecutada = 'Solicitud legítima aprobada automáticamente';\n  item.json.activo_comprometido = false;\n  item.json.incidente_resuelto = true;\n  item.json.ejecucion_segura = true;\n  item.json.control_respuesta = true;\n  item.json.control_proteccion_activo = true;\n  item.json.hora_resolucion = new Date().toISOString().slice(0,19).replace('T',' ');\n  return item;\n});"
       },
-      "id": "riesgo-bajo-06",
+      "id": "5eb8da0d-3484-4c79-a670-355d101a7e12",
       "name": "Riesgo bajo - Procesar",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1930, 100]
+      "position": [
+        2336,
+        736
+      ]
     },
     {
       "parameters": {
-        "jsCode": "return items.map(item => {\n  item.json.estado_certificado = 'pendiente';\n  item.json.accion_ejecutada = 'Solicitud retenida para revision';\n  item.json.activo_comprometido = false;\n  item.json.incidente_resuelto = true;\n  item.json.ejecucion_segura = true;\n  item.json.hora_resolucion = new Date().toISOString().slice(0,19).replace('T',' ');\n  return item;\n});"
+        "jsCode": "return items.map(item => {\n  item.json.estado_certificado = 'pendiente';\n  item.json.accion_ejecutada = 'Solicitud retenida para revisión manual';\n  item.json.activo_comprometido = false;\n  item.json.incidente_resuelto = true;\n  item.json.ejecucion_segura = true;\n  item.json.control_respuesta = true;\n  item.json.control_proteccion_activo = true;\n  item.json.hora_resolucion = new Date().toISOString().slice(0,19).replace('T',' ');\n  return item;\n});"
       },
-      "id": "riesgo-medio-06",
+      "id": "2340cda2-3589-429f-8ace-d2034ad25244",
       "name": "Riesgo medio - Retener",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1930, 300]
+      "position": [
+        2336,
+        944
+      ]
     },
     {
       "parameters": {
-        "jsCode": "return items.map(item => {\n  item.json.estado_certificado = 'cuarentena';\n  item.json.accion_ejecutada = 'Solicitud enviada a cuarentena';\n  item.json.activo_comprometido = false;\n  item.json.incidente_resuelto = true;\n  item.json.ejecucion_segura = true;\n  item.json.hora_resolucion = new Date().toISOString().slice(0,19).replace('T',' ');\n  return item;\n});"
+        "jsCode": "return items.map(item => {\n  item.json.estado_certificado = 'cuarentena';\n  item.json.accion_ejecutada = 'Solicitud bloqueada y enviada a cuarentena';\n  item.json.activo_comprometido = false;\n  item.json.incidente_resuelto = true;\n  item.json.ejecucion_segura = true;\n  item.json.control_respuesta = true;\n  item.json.control_proteccion_activo = true;\n  item.json.hora_resolucion = new Date().toISOString().slice(0,19).replace('T',' ');\n  return item;\n});"
       },
-      "id": "riesgo-alto-06",
+      "id": "34a9924e-59bc-49b3-80cf-eb8a6c3771e0",
       "name": "Riesgo alto - Cuarentena",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1930, 500]
+      "position": [
+        2336,
+        1152
+      ]
     },
     {
       "parameters": {
-        "jsCode": "return items.map(item => {\n  const deteccion = new Date(item.json.hora_deteccion.replace(' ','T'));\n  const resolucion = new Date(item.json.hora_resolucion.replace(' ','T'));\n  item.json.tiempo_respuesta_min = Number(((resolucion - deteccion) / 60000).toFixed(4));\n  item.json.estado_ejecucion = 'success';\n  return item;\n});"
+        "jsCode": "return items.map(item => {\n  const deteccion = new Date(item.json.hora_deteccion.replace(' ','T'));\n  const resolucion = new Date(item.json.hora_resolucion.replace(' ','T'));\n\n  item.json.tiempo_respuesta_min = Number(\n    ((resolucion - deteccion) / 60000).toFixed(4)\n  );\n\n  item.json.estado_ejecucion = 'success';\n\n  // Escape SQL para campos de texto que posteriormente se insertan.\n  // Forma parte del filtrado/protección del flujo CON seguridad.\n  const sqlSafe = (v) =>\n    String(v ?? '')\n      .replace(/\\\\/g, '\\\\\\\\')\n      .replace(/'/g, \"''\");\n\n  const campos = [\n    'id_ejecucion',\n    'id_incidente',\n    'flujo',\n    'proceso',\n    'escenario',\n    'bloque',\n    'remitente_email',\n    'nombres_apellidos',\n    'dni',\n    'tipo_actividad',\n    'nombre_actividad',\n    'periodo',\n    'observaciones',\n    'tipo_certificado',\n    'categoria_sistema',\n    'categoria_real',\n    'nivel',\n    'accion_ejecutada'\n  ];\n\n  for (const campo of campos) {\n    item.json[campo + '_sql'] = sqlSafe(item.json[campo]);\n  }\n\n  item.json.control_registro = true;\n  item.json.control_trazabilidad = true;\n\n  return item;\n});"
       },
-      "id": "metricas-06",
+      "id": "6eab17c5-a9ec-4193-815b-3d45a0eed429",
       "name": "Calcular metricas",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2200, 300]
+      "position": [
+        2608,
+        944
+      ]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO certificados (bloque, remitente_email, tipo_certificado, score_riesgo, estado, fecha_solicitud, fecha_resolucion) VALUES ('{{$json.bloque}}', '{{$json.remitente_email}}', 'estudios', {{$json.score_riesgo}}, '{{$json.estado_certificado}}', '{{$json.hora_ingreso}}', '{{$json.hora_resolucion}}');"
+        "query": "INSERT INTO certificados (\n  bloque,\n  remitente_email,\n  nombres_apellidos,\n  dni,\n  tipo_actividad,\n  nombre_actividad,\n  periodo,\n  observaciones,\n  tipo_certificado,\n  score_riesgo,\n  estado,\n  fecha_solicitud,\n  fecha_resolucion\n) VALUES (\n  '{{$json.bloque_sql}}',\n  '{{$json.remitente_email_sql}}',\n  '{{$json.nombres_apellidos_sql}}',\n  '{{$json.dni_sql}}',\n  '{{$json.tipo_actividad_sql}}',\n  '{{$json.nombre_actividad_sql}}',\n  '{{$json.periodo_sql}}',\n  '{{$json.observaciones_sql}}',\n  '{{$json.tipo_certificado_sql}}',\n  {{$json.score_riesgo}},\n  '{{$json.estado_certificado}}',\n  '{{$json.hora_ingreso}}',\n  '{{$json.hora_resolucion}}'\n);",
+        "options": {}
       },
-      "id": "mysql-certificado-06",
+      "id": "3ed61fa1-fd3e-435f-a98c-6ea0234bc108",
       "name": "MySQL - Registrar certificado",
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.4,
-      "position": [2470, 100],
+      "position": [
+        2896,
+        736
+      ],
       "credentials": {
         "mySql": {
-          "id": "",
-          "name": "CEFIC MySQL"
+          "id": "0AwItBBVRQVA5cqG",
+          "name": "MySQL account"
         }
       }
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO ejecuciones (flujo, proceso, escenario, inicio, fin, estado, incidente, activo_comprometido, ejecucion_segura) VALUES ('{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.hora_ingreso}}', '{{$json.hora_resolucion}}', '{{$json.estado_ejecucion}}', {{$json.categoria_sistema !== 'legitima' ? 1 : 0}}, {{$json.activo_comprometido ? 1 : 0}}, {{$json.ejecucion_segura ? 1 : 0}});"
+        "query": "INSERT INTO ejecuciones (\n  flujo, proceso, escenario, inicio, fin, estado,\n  incidente, activo_comprometido, ejecucion_segura\n) VALUES (\n  '{{$json.flujo_sql}}',\n  '{{$json.proceso_sql}}',\n  '{{$json.escenario_sql}}',\n  '{{$json.hora_ingreso}}',\n  '{{$json.hora_resolucion}}',\n  '{{$json.estado_ejecucion}}',\n  {{$json.categoria_sistema !== 'legitima' ? 1 : 0}},\n  {{$json.activo_comprometido ? 1 : 0}},\n  {{$json.ejecucion_segura ? 1 : 0}}\n);",
+        "options": {}
       },
-      "id": "mysql-ejecucion-06",
+      "id": "8363d5aa-2c50-4df3-bab1-3c13bf77f86e",
       "name": "MySQL - Registrar ejecucion",
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.4,
-      "position": [2470, 240],
+      "position": [
+        2896,
+        880
+      ],
       "credentials": {
         "mySql": {
-          "id": "",
-          "name": "CEFIC MySQL"
+          "id": "0AwItBBVRQVA5cqG",
+          "name": "MySQL account"
         }
       }
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO log_eventos (flujo, proceso, escenario, id_ejecucion, id_incidente, hora_ingreso, hora_deteccion, hora_resolucion, categoria, categoria_real, score_riesgo, nivel, accion_ejecutada, activo_comprometido, incidente_resuelto) VALUES ('{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.id_ejecucion}}', '{{$json.id_incidente}}', '{{$json.hora_ingreso}}', '{{$json.hora_deteccion}}', '{{$json.hora_resolucion}}', '{{$json.categoria_sistema}}', '{{$json.categoria_real}}', {{$json.score_riesgo}}, '{{$json.nivel}}', '{{$json.accion_ejecutada}}', {{$json.activo_comprometido ? 1 : 0}}, {{$json.incidente_resuelto ? 1 : 0}});"
+        "query": "INSERT INTO log_eventos (\n  flujo, proceso, escenario, id_ejecucion, id_incidente,\n  hora_ingreso, hora_deteccion, hora_resolucion,\n  categoria, categoria_real, score_riesgo, nivel,\n  accion_ejecutada, activo_comprometido, incidente_resuelto\n) VALUES (\n  '{{$json.flujo_sql}}',\n  '{{$json.proceso_sql}}',\n  '{{$json.escenario_sql}}',\n  '{{$json.id_ejecucion_sql}}',\n  '{{$json.id_incidente_sql}}',\n  '{{$json.hora_ingreso}}',\n  '{{$json.hora_deteccion}}',\n  '{{$json.hora_resolucion}}',\n  '{{$json.categoria_sistema_sql}}',\n  '{{$json.categoria_real_sql}}',\n  {{$json.score_riesgo}},\n  '{{$json.nivel_sql}}',\n  '{{$json.accion_ejecutada_sql}}',\n  {{$json.activo_comprometido ? 1 : 0}},\n  {{$json.incidente_resuelto ? 1 : 0}}\n);",
+        "options": {}
       },
-      "id": "mysql-evento-06",
+      "id": "1e3c7a70-1947-4307-9076-9a9309a8a466",
       "name": "MySQL - Registrar evento",
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.4,
-      "position": [2470, 380],
+      "position": [
+        2896,
+        1024
+      ],
       "credentials": {
         "mySql": {
-          "id": "",
-          "name": "CEFIC MySQL"
+          "id": "0AwItBBVRQVA5cqG",
+          "name": "MySQL account"
         }
       }
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO clasificaciones_amenazas (id_ejecucion, flujo, proceso, escenario, fecha_procesamiento, categoria_sistema, categoria_real, clasificacion_correcta, score_riesgo) VALUES ('{{$json.id_ejecucion}}', '{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.hora_deteccion}}', '{{$json.categoria_sistema}}', '{{$json.categoria_real}}', {{$json.clasificacion_correcta ? 1 : 0}}, {{$json.score_riesgo}});"
+        "query": "INSERT INTO clasificaciones_amenazas (\n  id_ejecucion, flujo, proceso, escenario, fecha_procesamiento,\n  categoria_sistema, categoria_real, clasificacion_correcta, score_riesgo\n) VALUES (\n  '{{$json.id_ejecucion_sql}}',\n  '{{$json.flujo_sql}}',\n  '{{$json.proceso_sql}}',\n  '{{$json.escenario_sql}}',\n  '{{$json.hora_deteccion}}',\n  '{{$json.categoria_sistema_sql}}',\n  '{{$json.categoria_real_sql}}',\n  {{$json.clasificacion_correcta ? 1 : 0}},\n  {{$json.score_riesgo}}\n);",
+        "options": {}
       },
-      "id": "mysql-clasificacion-06",
+      "id": "aced1f81-16fd-4e96-a89e-fe89adab2321",
       "name": "MySQL - Registrar clasificacion",
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.4,
-      "position": [2470, 520],
+      "position": [
+        2896,
+        1168
+      ],
       "credentials": {
         "mySql": {
-          "id": "",
-          "name": "CEFIC MySQL"
+          "id": "0AwItBBVRQVA5cqG",
+          "name": "MySQL account"
         }
       }
     }
   ],
+  "pinData": {},
   "connections": {
-    "Inicio manual": {
-      "main": [[{
-        "node": "Generar solicitud de prueba",
-        "type": "main",
-        "index": 0
-      }]]
+    "Formulario - Solicitud certificado": {
+      "main": [
+        [
+          {
+            "node": "Preparar solicitud segura",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Generar solicitud de prueba": {
-      "main": [[{
-        "node": "Validar remitente",
-        "type": "main",
-        "index": 0
-      }]]
+    "Preparar solicitud segura": {
+      "main": [
+        [
+          {
+            "node": "Validar origen y datos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Validar remitente": {
-      "main": [[{
-        "node": "Filtrar entrada",
-        "type": "main",
-        "index": 0
-      }]]
+    "Validar origen y datos": {
+      "main": [
+        [
+          {
+            "node": "Filtrar entrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Filtrar entrada": {
-      "main": [[{
-        "node": "Preparar analisis IA",
-        "type": "main",
-        "index": 0
-      }]]
+      "main": [
+        [
+          {
+            "node": "Preparar analisis IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Preparar analisis IA": {
-      "main": [[{
-        "node": "Groq - Analizar solicitud",
-        "type": "main",
-        "index": 0
-      }]]
+      "main": [
+        [
+          {
+            "node": "Groq - Analizar solicitud",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Groq - Analizar solicitud": {
-      "main": [[{
-        "node": "Procesar resultado de seguridad",
-        "type": "main",
-        "index": 0
-      }]]
+      "main": [
+        [
+          {
+            "node": "Procesar resultado de seguridad",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Procesar resultado de seguridad": {
-      "main": [[{
-        "node": "Enrutar segun riesgo",
-        "type": "main",
-        "index": 0
-      }]]
+      "main": [
+        [
+          {
+            "node": "Enrutar segun riesgo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Enrutar segun riesgo": {
       "main": [
-        [{
-          "node": "Riesgo bajo - Procesar",
-          "type": "main",
-          "index": 0
-        }],
-        [{
-          "node": "Riesgo medio - Retener",
-          "type": "main",
-          "index": 0
-        }],
-        [{
-          "node": "Riesgo alto - Cuarentena",
-          "type": "main",
-          "index": 0
-        }]
+        [
+          {
+            "node": "Riesgo bajo - Procesar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Riesgo medio - Retener",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Riesgo alto - Cuarentena",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Riesgo bajo - Procesar": {
-      "main": [[{
-        "node": "Calcular metricas",
-        "type": "main",
-        "index": 0
-      }]]
+      "main": [
+        [
+          {
+            "node": "Calcular metricas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Riesgo medio - Retener": {
-      "main": [[{
-        "node": "Calcular metricas",
-        "type": "main",
-        "index": 0
-      }]]
+      "main": [
+        [
+          {
+            "node": "Calcular metricas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Riesgo alto - Cuarentena": {
-      "main": [[{
-        "node": "Calcular metricas",
-        "type": "main",
-        "index": 0
-      }]]
+      "main": [
+        [
+          {
+            "node": "Calcular metricas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Calcular metricas": {
-      "main": [[
-        {
-          "node": "MySQL - Registrar certificado",
-          "type": "main",
-          "index": 0
-        },
-        {
-          "node": "MySQL - Registrar ejecucion",
-          "type": "main",
-          "index": 0
-        },
-        {
-          "node": "MySQL - Registrar evento",
-          "type": "main",
-          "index": 0
-        },
-        {
-          "node": "MySQL - Registrar clasificacion",
-          "type": "main",
-          "index": 0
-        }
-      ]]
+      "main": [
+        [
+          {
+            "node": "MySQL - Registrar certificado",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "MySQL - Registrar ejecucion",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "MySQL - Registrar evento",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "MySQL - Registrar clasificacion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "settings": {
-    "executionOrder": "v1"
-  },
   "active": false,
-  "pinData": {},
-  "versionId": "66666666-6666-4666-8666-666666666666",
-  "meta": {
-    "templateCredsSetupCompleted": false
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
   },
+  "versionId": "698b58cd-7f15-488a-b56c-bcc41415ba45",
+  "meta": {
+    "instanceId": "2f2b321f02fd71546bee436db8be70efce30abb11bb8cd354546a706ab625298",
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
   "tags": []
 }

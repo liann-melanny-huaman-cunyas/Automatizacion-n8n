@@ -1,79 +1,145 @@
 {
-  "name": "07 - Matricula - CON seguridad SOAR",
+  "name": "07 - Matricula - CON seguridad SOAR - Formulario existente o nuevo",
   "nodes": [
     {
-      "parameters": {},
-      "id": "manual-trigger-07",
-      "name": "Inicio manual",
-      "type": "n8n-nodes-base.manualTrigger",
-      "typeVersion": 1,
+      "parameters": {
+        "formTitle": "Solicitud de matrícula segura - CEFIC",
+        "formDescription": "Ingrese DNI y correo. Si ya está registrado, el sistema recuperará sus datos. Si es nuevo, complete nombres y programa académico.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "DNI",
+              "fieldName": "dni",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Correo electrónico",
+              "fieldName": "correo",
+              "fieldType": "email",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Nombres y apellidos (solo si es estudiante nuevo)",
+              "fieldName": "nombres_apellidos",
+              "fieldType": "text",
+              "requiredField": false
+            },
+            {
+              "fieldLabel": "Programa académico (solo si es estudiante nuevo)",
+              "fieldName": "programa_academico",
+              "fieldType": "text",
+              "requiredField": false
+            },
+            {
+              "fieldLabel": "Periodo académico",
+              "fieldName": "periodo_academico",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Curso / actividad",
+              "fieldName": "curso",
+              "fieldType": "text",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "form-trigger-07",
+      "name": "Formulario - Solicitud matricula segura",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.5,
       "position": [
-        0,
+        -1500,
         300
-      ]
+      ],
+      "webhookId": "matricula-con-seguridad-form"
     },
     {
       "parameters": {
-        "jsCode": "const ahora = new Date();\nconst ts = Date.now();\nconst fecha = ahora.toISOString().slice(0,19).replace('T',' ');\n\nreturn [{\n  json: {\n    id_ejecucion: 'MAT-SEG-' + ts,\n    id_incidente: 'INC-MAT-' + ts,\n    flujo: '07',\n    proceso: 'matricula',\n    escenario: 'con_seguridad',\n    bloque: 'con_seguridad',\n    dni: '74859632',\n    codigo_estudiante: 'EST-' + ts,\n    nombre_estudiante: 'Estudiante de prueba',\n    programa_academico: 'Ingenieria de Sistemas',\n    periodo_academico: '2026-II',\n    curso: 'Seguridad Informatica',\n    categoria_real: 'legitimo',\n    hora_ingreso: fecha\n  }\n}];"
+        "jsCode": "return items.map(item => {\n  const d = item.json || {};\n  const ahora = new Date();\n  const ts = Date.now();\n  const fecha = ahora.toISOString().slice(0,19).replace('T',' ');\n\n  const esc = (v) => String(v ?? '')\n    .trim()\n    .replace(/\\\\/g, '\\\\\\\\')\n    .replace(/'/g, \"''\");\n\n  return {\n    json: {\n      id_ejecucion: 'MAT-SEG-' + ts + '-' + Math.random().toString(36).slice(2,7),\n      id_incidente: 'INC-MAT-' + ts + '-' + Math.random().toString(36).slice(2,7),\n\n      flujo: '07',\n      proceso: 'matricula',\n      escenario: 'con_seguridad',\n      bloque: 'con_seguridad',\n      origen_solicitud: 'formulario_cefic',\n\n      dni: String(d.dni || '').trim(),\n      correo: String(d.correo || '').trim().toLowerCase(),\n      nombres_form: String(d.nombres_apellidos || '').trim(),\n      programa_form: String(d.programa_academico || '').trim(),\n      periodo_academico: String(d.periodo_academico || '').trim(),\n      curso: String(d.curso || '').trim(),\n\n      categoria_real: 'pendiente_validacion',\n      hora_ingreso: fecha,\n\n      dni_sql: esc(d.dni),\n      correo_sql: esc(String(d.correo || '').toLowerCase()),\n      nombres_form_sql: esc(d.nombres_apellidos),\n      programa_form_sql: esc(d.programa_academico),\n      periodo_sql: esc(d.periodo_academico),\n      curso_sql: esc(d.curso)\n    }\n  };\n});"
       },
-      "id": "generar-matricula-07",
-      "name": "Generar matricula de prueba",
+      "id": "preparar-solicitud-07",
+      "name": "Preparar solicitud segura",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        220,
+        -1260,
         300
       ]
     },
     {
       "parameters": {
-        "jsCode": "return items.map(item => {\n  const d = item.json;\n\n  const camposCompletos = Boolean(\n    d.dni &&\n    d.codigo_estudiante &&\n    d.nombre_estudiante &&\n    d.programa_academico &&\n    d.periodo_academico &&\n    d.curso\n  );\n\n  const dniValido = /^\\d{8}$/.test(String(d.dni || ''));\n\n  d.campos_validos = camposCompletos;\n  d.dni_valido = dniValido;\n  d.entrada_valida = camposCompletos && dniValido;\n  d.control_validacion_entrada = true;\n\n  return item;\n});"
+        "operation": "executeQuery",
+        "query": "SELECT\n  CASE WHEN e.id IS NULL THEN 0 ELSE 1 END AS estudiante_encontrado,\n  COALESCE(e.id, 0) AS estudiante_id,\n  COALESCE(e.codigo_estudiante, '') AS codigo_estudiante_bd,\n  COALESCE(e.dni, '{{$json.dni_sql}}') AS dni,\n  COALESCE(e.nombres_apellidos, '') AS nombre_estudiante_bd,\n  COALESCE(e.correo, '{{$json.correo_sql}}') AS correo,\n  COALESCE(e.programa_academico, '') AS programa_academico_bd,\n\n  '{{$json.id_ejecucion}}' AS id_ejecucion,\n  '{{$json.id_incidente}}' AS id_incidente,\n  '{{$json.flujo}}' AS flujo,\n  '{{$json.proceso}}' AS proceso,\n  '{{$json.escenario}}' AS escenario,\n  '{{$json.bloque}}' AS bloque,\n  '{{$json.origen_solicitud}}' AS origen_solicitud,\n  '{{$json.nombres_form_sql}}' AS nombres_form,\n  '{{$json.programa_form_sql}}' AS programa_form,\n  '{{$json.periodo_sql}}' AS periodo_academico,\n  '{{$json.curso_sql}}' AS curso,\n  '{{$json.categoria_real}}' AS categoria_real,\n  '{{$json.hora_ingreso}}' AS hora_ingreso\nFROM (SELECT 1 AS dummy) base\nLEFT JOIN estudiantes e\n  ON e.dni = '{{$json.dni_sql}}'\n AND LOWER(e.correo) = LOWER('{{$json.correo_sql}}')\n AND e.estado = 'activo'\nLIMIT 1;",
+        "options": {}
+      },
+      "id": "mysql-buscar-estudiante-07",
+      "name": "MySQL - Buscar estudiante",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        -1010,
+        300
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "0AwItBBVRQVA5cqG",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const d = item.json || {};\n  const ts = Date.now();\n  const encontrado = Number(d.estudiante_encontrado || 0) === 1;\n\n  const codigo = encontrado\n    ? String(d.codigo_estudiante_bd || '').trim()\n    : 'EST-' + ts;\n\n  const nombre = encontrado\n    ? String(d.nombre_estudiante_bd || '').trim()\n    : String(d.nombres_form || '').trim();\n\n  const programa = encontrado\n    ? String(d.programa_academico_bd || '').trim()\n    : String(d.programa_form || '').trim();\n\n  item.json.estudiante_encontrado = encontrado;\n  item.json.estudiante_nuevo = !encontrado;\n  item.json.codigo_estudiante = codigo;\n  item.json.nombre_estudiante = nombre;\n  item.json.programa_academico = programa;\n\n  return item;\n});"
+      },
+      "id": "resolver-estudiante-07",
+      "name": "Resolver estudiante",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -770,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const d = item.json || {};\n\n  const dni = String(d.dni || '').trim();\n  const correo = String(d.correo || '').trim().toLowerCase();\n  const nombre = String(d.nombre_estudiante || '').trim();\n  const programa = String(d.programa_academico || '').trim();\n  const periodo = String(d.periodo_academico || '').trim();\n  const curso = String(d.curso || '').trim();\n\n  const dniValido = /^\\d{8}$/.test(dni);\n  const correoValido = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(correo);\n  const origenValido = d.origen_solicitud === 'formulario_cefic';\n\n  const camposCompletos = Boolean(\n    dni && correo && nombre && programa && periodo && curso\n  );\n\n  const longitudesValidas =\n    nombre.length <= 150 &&\n    programa.length <= 150 &&\n    periodo.length <= 50 &&\n    curso.length <= 150 &&\n    correo.length <= 150;\n\n  d.dni_valido = dniValido;\n  d.correo_valido = correoValido;\n  d.origen_valido = origenValido;\n  d.campos_validos = camposCompletos;\n  d.longitudes_validas = longitudesValidas;\n  d.entrada_valida = dniValido && correoValido && origenValido && camposCompletos && longitudesValidas;\n\n  d.control_validacion_origen = true;\n  d.control_validacion_entrada = true;\n\n  return item;\n});"
       },
       "id": "validar-entrada-07",
-      "name": "Validar entrada",
+      "name": "Validar origen y datos",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        450,
+        -530,
         300
       ]
     },
     {
       "parameters": {
-        "jsCode": "return items.map(item => {\n  const dni = String(item.json.dni || '');\n\n  // Protección demostrativa compatible con el Code node de n8n.\n  // No utiliza módulos externos.\n  let hash = 2166136261;\n  for (let i = 0; i < dni.length; i++) {\n    hash ^= dni.charCodeAt(i);\n    hash = Math.imul(hash, 16777619);\n  }\n\n  item.json.dni_hash =\n    'PROT-' + (hash >>> 0).toString(16).padStart(8, '0').toUpperCase();\n\n  // Evitamos que el DNI original continúe por el workflow.\n  delete item.json.dni;\n\n  item.json.control_proteccion_dato = true;\n\n  return item;\n});"
-      },
-      "id": "proteger-dni-07",
-      "name": "Proteger dato academico",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        680,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "return items.map(item => {\n\n  const texto = `${item.json.nombre_estudiante || ''} ${item.json.programa_academico || ''} ${item.json.curso || ''}`.toLowerCase();\n\n  const patrones = [\n    '<script',\n    'drop table',\n    'select * from',\n    'union select',\n    '--',\n    '../',\n    'or 1=1',\n    'admin',\n    'root'\n  ];\n\n  const coincidencias = patrones.filter(p => texto.includes(p));\n\n  item.json.patrones_sospechosos = coincidencias;\n  item.json.contenido_sospechoso = coincidencias.length > 0;\n  item.json.control_filtrado = true;\n\n  return item;\n});"
+        "jsCode": "return items.map(item => {\n  const d = item.json || {};\n\n  const texto = [\n    d.dni,\n    d.correo,\n    d.nombre_estudiante,\n    d.programa_academico,\n    d.periodo_academico,\n    d.curso\n  ].join(' ').toLowerCase();\n\n  const firmas = [\n    { nombre: 'script_html', regex: /<\\s*script|javascript\\s*:/i },\n    { nombre: 'sql_union', regex: /\\bunion\\s+select\\b/i },\n    { nombre: 'sql_drop', regex: /\\bdrop\\s+table\\b/i },\n    { nombre: 'sql_tautologia', regex: /(['\"]?\\s*or\\s+['\"]?1['\"]?\\s*=\\s*['\"]?1)/i },\n    { nombre: 'comentario_sql', regex: /(--|\\/\\*|#)/ },\n    { nombre: 'path_traversal', regex: /(\\.\\.\\/|\\.\\.\\\\)/ }\n  ];\n\n  const coincidencias = firmas\n    .filter(f => f.regex.test(texto))\n    .map(f => f.nombre);\n\n  d.patrones_sospechosos = coincidencias;\n  d.contenido_sospechoso = coincidencias.length > 0;\n  d.control_filtrado = true;\n\n  return item;\n});"
       },
       "id": "filtrar-entrada-07",
       "name": "Filtrar entrada",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        920,
+        -290,
         300
       ]
     },
     {
       "parameters": {
-        "jsCode": "return items.map(item => {\n\n  item.json.prompt_groq = `Actúa como analista de ciberseguridad.\n\nAnaliza el siguiente registro de matrícula y clasifícalo como legitimo o registro_anomalo.\n\nAsigna un score de riesgo entero entre 1 y 10.\n\nResponde EXCLUSIVAMENTE con JSON válido:\n{\"categoria\":\"legitimo|registro_anomalo\",\"score\":1,\"justificacion\":\"texto breve\"}\n\nEntrada válida: ${item.json.entrada_valida}\nDNI válido: ${item.json.dni_valido}\nCódigo estudiante: ${item.json.codigo_estudiante}\nPrograma: ${item.json.programa_academico}\nPeriodo: ${item.json.periodo_academico}\nCurso: ${item.json.curso}\nPatrones sospechosos: ${JSON.stringify(item.json.patrones_sospechosos)}`;\n\n  return item;\n});"
+        "jsCode": "return items.map(item => {\n  const d = item.json || {};\n\n  d.prompt_groq = `Actúa como analista de ciberseguridad para CEFIC-Perú.\n\nEvalúa una solicitud de matrícula recibida mediante formulario web.\n\nClasifica únicamente como:\n- legitimo\n- registro_anomalo\n\nAsigna un score de riesgo entero entre 1 y 10.\n\nIMPORTANTE:\n- Un correo externo no es sospechoso por sí solo.\n- Un estudiante nuevo tampoco es sospechoso por sí solo.\n- Considera validaciones de formato, campos incompletos y patrones de entrada sospechosos.\n- No evalúes si académicamente merece la matrícula; solo riesgo de seguridad.\n\nResponde EXCLUSIVAMENTE con JSON válido:\n{\"categoria\":\"legitimo|registro_anomalo\",\"score\":1,\"justificacion\":\"texto breve\"}\n\nEstudiante encontrado: ${d.estudiante_encontrado}\nEstudiante nuevo: ${d.estudiante_nuevo}\nDNI válido: ${d.dni_valido}\nCorreo válido: ${d.correo_valido}\nEntrada válida: ${d.entrada_valida}\nCódigo: ${d.codigo_estudiante}\nNombre: ${d.nombre_estudiante}\nPrograma: ${d.programa_academico}\nPeriodo: ${d.periodo_academico}\nCurso: ${d.curso}\nPatrones sospechosos: ${JSON.stringify(d.patrones_sospechosos)}`;\n\n  return item;\n});"
       },
       "id": "preparar-prompt-07",
       "name": "Preparar analisis IA",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1160,
+        -50,
         300
       ]
     },
@@ -106,20 +172,20 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1400,
+        190,
         300
       ]
     },
     {
       "parameters": {
-        "jsCode": "const original = $('Filtrar entrada').item.json;\n\nlet raw = '';\n\ntry {\n  raw = $json.choices[0].message.content;\n} catch (e) {\n  raw = '';\n}\n\nlet resultado;\n\ntry {\n  resultado = JSON.parse(\n    String(raw)\n      .replace(/```json/gi, '')\n      .replace(/```/g, '')\n      .trim()\n  );\n} catch (e) {\n  resultado = {\n    categoria: 'registro_anomalo',\n    score: 5,\n    justificacion: 'No se pudo interpretar la respuesta del modelo.'\n  };\n}\n\nlet score = Number(resultado.score);\n\nif (!Number.isFinite(score)) {\n  score = 5;\n}\n\nscore = Math.max(1, Math.min(10, Math.round(score)));\n\nif (original.entrada_valida === false) {\n  score = Math.max(score, 8);\n}\n\nif (original.contenido_sospechoso === true) {\n  score = Math.max(score, 8);\n}\n\nlet nivel = 'bajo';\n\nif (score >= 8) {\n  nivel = 'alto';\n} else if (score >= 4) {\n  nivel = 'medio';\n}\n\nconst ahora = new Date();\nconst horaDeteccion = ahora.toISOString().slice(0,19).replace('T',' ');\nconst ingreso = new Date(original.hora_ingreso.replace(' ','T'));\nconst tiempoDeteccion = (ahora.getTime() - ingreso.getTime()) / 60000;\n\nconst categoriaSistema = String(\n  resultado.categoria || 'registro_anomalo'\n).toLowerCase();\n\nreturn [{\n  json: {\n    ...original,\n    categoria_sistema: categoriaSistema,\n    score_riesgo: score,\n    nivel,\n    justificacion: resultado.justificacion || '',\n    clasificacion_correcta:\n      categoriaSistema === String(original.categoria_real || '').toLowerCase(),\n    hora_deteccion: horaDeteccion,\n    tiempo_deteccion_min: Number(tiempoDeteccion.toFixed(4)),\n    control_deteccion: true,\n    control_clasificacion: true,\n    control_score: true,\n    control_enrutamiento: true\n  }\n}];"
+        "jsCode": "const original = $('Filtrar entrada').item.json;\n\nlet raw = '';\ntry {\n  raw = $json.choices[0].message.content;\n} catch (e) {\n  raw = '';\n}\n\nlet resultado;\ntry {\n  resultado = JSON.parse(\n    String(raw)\n      .replace(/```json/gi, '')\n      .replace(/```/g, '')\n      .trim()\n  );\n} catch (e) {\n  resultado = {\n    categoria: 'registro_anomalo',\n    score: 5,\n    justificacion: 'No se pudo interpretar la respuesta del modelo.'\n  };\n}\n\nlet score = Number(resultado.score);\nif (!Number.isFinite(score)) score = 5;\n\nscore = Math.max(1, Math.min(10, Math.round(score)));\n\nlet categoriaSistema = String(resultado.categoria || 'registro_anomalo').toLowerCase();\nif (!['legitimo','registro_anomalo'].includes(categoriaSistema)) {\n  categoriaSistema = 'registro_anomalo';\n}\n\nif (original.origen_valido === false) {\n  score = Math.max(score, 8);\n  categoriaSistema = 'registro_anomalo';\n}\n\nif (original.entrada_valida === false) {\n  score = Math.max(score, 8);\n  categoriaSistema = 'registro_anomalo';\n}\n\nif (original.contenido_sospechoso === true) {\n  score = Math.max(score, 9);\n  categoriaSistema = 'registro_anomalo';\n}\n\nlet nivel = 'bajo';\nif (score >= 8) nivel = 'alto';\nelse if (score >= 4) nivel = 'medio';\n\nconst ahora = new Date();\nconst horaDeteccion = ahora.toISOString().slice(0,19).replace('T',' ');\nconst ingreso = new Date(String(original.hora_ingreso).replace(' ','T'));\nconst tiempoDeteccion = Math.max(0, (ahora.getTime() - ingreso.getTime()) / 60000);\n\nconst categoriaReal = String(original.categoria_real || 'pendiente_validacion').toLowerCase();\nconst clasificacionCorrecta =\n  categoriaReal !== 'pendiente_validacion' &&\n  categoriaSistema === categoriaReal;\n\nreturn [{\n  json: {\n    ...original,\n    categoria_sistema: categoriaSistema,\n    score_riesgo: score,\n    nivel,\n    justificacion: String(resultado.justificacion || ''),\n    clasificacion_correcta: clasificacionCorrecta,\n    hora_deteccion: horaDeteccion,\n    tiempo_deteccion_min: Number(tiempoDeteccion.toFixed(4)),\n\n    control_deteccion: true,\n    control_clasificacion: true,\n    control_score: true,\n    control_enrutamiento: true\n  }\n}];"
       },
       "id": "procesar-resultado-07",
       "name": "Procesar resultado de seguridad",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1650,
+        440,
         300
       ]
     },
@@ -184,178 +250,214 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
       "position": [
-        1890,
+        690,
         300
       ]
     },
     {
       "parameters": {
-        "jsCode": "return items.map(item => {\n  item.json.estado_matricula = 'procesada';\n  item.json.accion_ejecutada = 'Matricula procesada';\n  item.json.activo_comprometido = false;\n  item.json.incidente_resuelto = true;\n  item.json.ejecucion_segura = true;\n  item.json.alerta_generada = false;\n  item.json.control_respuesta = true;\n  item.json.control_alerta = false;\n  item.json.control_bloqueo = false;\n  item.json.hora_resolucion = new Date().toISOString().slice(0,19).replace('T',' ');\n  return item;\n});"
+        "jsCode": "return items.map(item => {\n  item.json.estado_matricula = 'procesada';\n  item.json.accion_ejecutada = item.json.estudiante_nuevo\n    ? 'Solicitud segura: crear estudiante y procesar matricula'\n    : 'Solicitud segura: procesar matricula de estudiante registrado';\n\n  item.json.activo_comprometido = false;\n  item.json.incidente_resuelto = true;\n  item.json.ejecucion_segura = true;\n  item.json.alerta_generada = false;\n  item.json.registrar_estudiante = item.json.estudiante_nuevo === true;\n\n  item.json.control_respuesta = true;\n  item.json.control_alerta = false;\n  item.json.control_proteccion_activo = true;\n\n  item.json.hora_resolucion = new Date().toISOString().slice(0,19).replace('T',' ');\n  return item;\n});"
       },
       "id": "riesgo-bajo-07",
       "name": "Riesgo bajo - Procesar",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2150,
-        100
+        950,
+        90
       ]
     },
     {
       "parameters": {
-        "jsCode": "return items.map(item => {\n  item.json.estado_matricula = 'pendiente';\n  item.json.accion_ejecutada = 'Matricula retenida para revision';\n  item.json.activo_comprometido = false;\n  item.json.incidente_resuelto = true;\n  item.json.ejecucion_segura = true;\n  item.json.alerta_generada = true;\n  item.json.control_respuesta = true;\n  item.json.control_alerta = true;\n  item.json.control_bloqueo = true;\n  item.json.hora_resolucion = new Date().toISOString().slice(0,19).replace('T',' ');\n  return item;\n});"
+        "jsCode": "return items.map(item => {\n  item.json.estado_matricula = 'pendiente';\n  item.json.accion_ejecutada = 'Solicitud retenida para revision manual por riesgo medio';\n  item.json.activo_comprometido = false;\n  item.json.incidente_resuelto = true;\n  item.json.ejecucion_segura = true;\n  item.json.alerta_generada = true;\n  item.json.registrar_estudiante = false;\n\n  item.json.control_respuesta = true;\n  item.json.control_alerta = true;\n  item.json.control_proteccion_activo = true;\n\n  item.json.hora_resolucion = new Date().toISOString().slice(0,19).replace('T',' ');\n  return item;\n});"
       },
       "id": "riesgo-medio-07",
       "name": "Riesgo medio - Retener",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2150,
+        950,
         300
       ]
     },
     {
       "parameters": {
-        "jsCode": "return items.map(item => {\n  item.json.estado_matricula = 'rechazada';\n  item.json.accion_ejecutada = 'Matricula bloqueada automaticamente';\n  item.json.activo_comprometido = false;\n  item.json.incidente_resuelto = true;\n  item.json.ejecucion_segura = true;\n  item.json.alerta_generada = true;\n  item.json.control_respuesta = true;\n  item.json.control_alerta = true;\n  item.json.control_bloqueo = true;\n  item.json.hora_resolucion = new Date().toISOString().slice(0,19).replace('T',' ');\n  return item;\n});"
+        "jsCode": "return items.map(item => {\n  item.json.estado_matricula = 'rechazada';\n  item.json.accion_ejecutada = 'Solicitud bloqueada automaticamente por riesgo alto';\n  item.json.activo_comprometido = false;\n  item.json.incidente_resuelto = true;\n  item.json.ejecucion_segura = true;\n  item.json.alerta_generada = true;\n  item.json.registrar_estudiante = false;\n\n  item.json.control_respuesta = true;\n  item.json.control_alerta = true;\n  item.json.control_proteccion_activo = true;\n\n  item.json.hora_resolucion = new Date().toISOString().slice(0,19).replace('T',' ');\n  return item;\n});"
       },
       "id": "riesgo-alto-07",
       "name": "Riesgo alto - Bloquear",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2150,
-        500
+        950,
+        510
       ]
     },
     {
       "parameters": {
-        "jsCode": "return items.map(item => {\n  const deteccion = new Date(item.json.hora_deteccion.replace(' ','T'));\n  const resolucion = new Date(item.json.hora_resolucion.replace(' ','T'));\n\n  item.json.tiempo_respuesta_min = Number(\n    ((resolucion.getTime() - deteccion.getTime()) / 60000).toFixed(4)\n  );\n\n  item.json.estado_ejecucion = 'success';\n\n  return item;\n});"
+        "jsCode": "return items.map(item => {\n  const deteccion = new Date(String(item.json.hora_deteccion).replace(' ','T'));\n  const resolucion = new Date(String(item.json.hora_resolucion).replace(' ','T'));\n\n  item.json.tiempo_respuesta_min = Number(\n    Math.max(0, (resolucion.getTime() - deteccion.getTime()) / 60000).toFixed(4)\n  );\n\n  item.json.estado_ejecucion = 'success';\n  item.json.control_registro = true;\n  item.json.control_trazabilidad = true;\n\n  const esc = (v) => String(v ?? '')\n    .replace(/\\\\/g, '\\\\\\\\')\n    .replace(/'/g, \"''\");\n\n  item.json.codigo_sql = esc(item.json.codigo_estudiante);\n  item.json.dni_sql = esc(item.json.dni);\n  item.json.correo_sql = esc(item.json.correo);\n  item.json.nombre_sql = esc(item.json.nombre_estudiante);\n  item.json.programa_sql = esc(item.json.programa_academico);\n  item.json.periodo_sql = esc(item.json.periodo_academico);\n  item.json.curso_sql = esc(item.json.curso);\n  item.json.accion_sql = esc(item.json.accion_ejecutada);\n  item.json.categoria_sql = esc(item.json.categoria_sistema);\n  item.json.categoria_real_sql = esc(item.json.categoria_real);\n  item.json.justificacion_sql = esc(item.json.justificacion);\n\n  return item;\n});"
       },
       "id": "metricas-07",
       "name": "Calcular metricas",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2410,
+        1210,
         300
       ]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO matriculas (codigo_estudiante, nombre_estudiante, programa_academico, periodo_academico, curso, estado_matricula, bloque, score_riesgo, nivel, accion_ejecutada, fecha_registro, fecha_procesamiento) VALUES ('{{$json.codigo_estudiante}}', '{{$json.nombre_estudiante}}', '{{$json.programa_academico}}', '{{$json.periodo_academico}}', '{{$json.curso}}', '{{$json.estado_matricula}}', '{{$json.bloque}}', {{$json.score_riesgo}}, '{{$json.nivel}}', '{{$json.accion_ejecutada}}', '{{$json.hora_ingreso}}', '{{$json.hora_resolucion}}');"
+        "query": "INSERT INTO estudiantes (\n  codigo_estudiante,\n  dni,\n  nombres_apellidos,\n  correo,\n  programa_academico,\n  estado\n)\nSELECT\n  '{{$json.codigo_sql}}',\n  '{{$json.dni_sql}}',\n  '{{$json.nombre_sql}}',\n  '{{$json.correo_sql}}',\n  '{{$json.programa_sql}}',\n  'activo'\nWHERE {{$json.registrar_estudiante ? 1 : 0}} = 1\n  AND '{{$json.estado_matricula}}' = 'procesada';",
+        "options": {}
+      },
+      "id": "mysql-registrar-estudiante-07",
+      "name": "MySQL - Registrar estudiante nuevo",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        1470,
+        20
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "0AwItBBVRQVA5cqG",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO matriculas (\n  codigo_estudiante,\n  nombre_estudiante,\n  programa_academico,\n  periodo_academico,\n  curso,\n  estado_matricula,\n  bloque,\n  score_riesgo,\n  nivel,\n  accion_ejecutada,\n  fecha_registro,\n  fecha_procesamiento\n) VALUES (\n  '{{$json.codigo_sql}}',\n  '{{$json.nombre_sql}}',\n  '{{$json.programa_sql}}',\n  '{{$json.periodo_sql}}',\n  '{{$json.curso_sql}}',\n  '{{$json.estado_matricula}}',\n  'con_seguridad',\n  {{$json.score_riesgo}},\n  '{{$json.nivel}}',\n  '{{$json.accion_sql}}',\n  '{{$json.hora_ingreso}}',\n  '{{$json.hora_resolucion}}'\n);",
+        "options": {}
       },
       "id": "mysql-matricula-07",
       "name": "MySQL - Registrar matricula",
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.4,
       "position": [
-        2670,
-        90
+        1470,
+        170
       ],
       "credentials": {
         "mySql": {
-          "id": "",
-          "name": "CEFIC MySQL"
+          "id": "0AwItBBVRQVA5cqG",
+          "name": "MySQL account"
         }
       }
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO ejecuciones (flujo, proceso, escenario, inicio, fin, estado, incidente, activo_comprometido, ejecucion_segura) VALUES ('{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.hora_ingreso}}', '{{$json.hora_resolucion}}', '{{$json.estado_ejecucion}}', {{$json.categoria_sistema !== 'legitimo' ? 1 : 0}}, {{$json.activo_comprometido ? 1 : 0}}, {{$json.ejecucion_segura ? 1 : 0}});"
+        "query": "INSERT INTO ejecuciones (\n  flujo, proceso, escenario, inicio, fin, estado,\n  incidente, activo_comprometido, ejecucion_segura\n) VALUES (\n  '{{$json.flujo}}',\n  '{{$json.proceso}}',\n  '{{$json.escenario}}',\n  '{{$json.hora_ingreso}}',\n  '{{$json.hora_resolucion}}',\n  '{{$json.estado_ejecucion}}',\n  {{$json.categoria_sistema !== 'legitimo' ? 1 : 0}},\n  {{$json.activo_comprometido ? 1 : 0}},\n  {{$json.ejecucion_segura ? 1 : 0}}\n);",
+        "options": {}
       },
       "id": "mysql-ejecucion-07",
       "name": "MySQL - Registrar ejecucion",
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.4,
       "position": [
-        2670,
-        230
+        1470,
+        320
       ],
       "credentials": {
         "mySql": {
-          "id": "",
-          "name": "CEFIC MySQL"
+          "id": "0AwItBBVRQVA5cqG",
+          "name": "MySQL account"
         }
       }
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO log_eventos (flujo, proceso, escenario, id_ejecucion, id_incidente, hora_ingreso, hora_deteccion, hora_resolucion, categoria, categoria_real, score_riesgo, nivel, accion_ejecutada, activo_comprometido, incidente_resuelto) VALUES ('{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.id_ejecucion}}', '{{$json.id_incidente}}', '{{$json.hora_ingreso}}', '{{$json.hora_deteccion}}', '{{$json.hora_resolucion}}', '{{$json.categoria_sistema}}', '{{$json.categoria_real}}', {{$json.score_riesgo}}, '{{$json.nivel}}', '{{$json.accion_ejecutada}}', {{$json.activo_comprometido ? 1 : 0}}, {{$json.incidente_resuelto ? 1 : 0}});"
+        "query": "INSERT INTO log_eventos (\n  flujo, proceso, escenario, id_ejecucion, id_incidente,\n  hora_ingreso, hora_deteccion, hora_resolucion,\n  categoria, categoria_real, score_riesgo, nivel,\n  accion_ejecutada, activo_comprometido, incidente_resuelto\n) VALUES (\n  '{{$json.flujo}}',\n  '{{$json.proceso}}',\n  '{{$json.escenario}}',\n  '{{$json.id_ejecucion}}',\n  '{{$json.id_incidente}}',\n  '{{$json.hora_ingreso}}',\n  '{{$json.hora_deteccion}}',\n  '{{$json.hora_resolucion}}',\n  '{{$json.categoria_sql}}',\n  '{{$json.categoria_real_sql}}',\n  {{$json.score_riesgo}},\n  '{{$json.nivel}}',\n  '{{$json.accion_sql}}',\n  {{$json.activo_comprometido ? 1 : 0}},\n  {{$json.incidente_resuelto ? 1 : 0}}\n);",
+        "options": {}
       },
       "id": "mysql-evento-07",
       "name": "MySQL - Registrar evento",
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.4,
       "position": [
-        2670,
-        370
+        1470,
+        470
       ],
       "credentials": {
         "mySql": {
-          "id": "",
-          "name": "CEFIC MySQL"
+          "id": "0AwItBBVRQVA5cqG",
+          "name": "MySQL account"
         }
       }
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO clasificaciones_amenazas (id_ejecucion, flujo, proceso, escenario, fecha_procesamiento, categoria_sistema, categoria_real, clasificacion_correcta, score_riesgo) VALUES ('{{$json.id_ejecucion}}', '{{$json.flujo}}', '{{$json.proceso}}', '{{$json.escenario}}', '{{$json.hora_deteccion}}', '{{$json.categoria_sistema}}', '{{$json.categoria_real}}', {{$json.clasificacion_correcta ? 1 : 0}}, {{$json.score_riesgo}});"
+        "query": "INSERT INTO clasificaciones_amenazas (\n  id_ejecucion, flujo, proceso, escenario,\n  fecha_procesamiento, categoria_sistema,\n  categoria_real, clasificacion_correcta, score_riesgo\n) VALUES (\n  '{{$json.id_ejecucion}}',\n  '{{$json.flujo}}',\n  '{{$json.proceso}}',\n  '{{$json.escenario}}',\n  '{{$json.hora_deteccion}}',\n  '{{$json.categoria_sql}}',\n  '{{$json.categoria_real_sql}}',\n  {{$json.clasificacion_correcta ? 1 : 0}},\n  {{$json.score_riesgo}}\n);",
+        "options": {}
       },
       "id": "mysql-clasificacion-07",
       "name": "MySQL - Registrar clasificacion",
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.4,
       "position": [
-        2670,
-        510
+        1470,
+        620
       ],
       "credentials": {
         "mySql": {
-          "id": "",
-          "name": "CEFIC MySQL"
+          "id": "0AwItBBVRQVA5cqG",
+          "name": "MySQL account"
         }
       }
     }
   ],
   "connections": {
-    "Inicio manual": {
+    "Formulario - Solicitud matricula segura": {
       "main": [
         [
           {
-            "node": "Generar matricula de prueba",
+            "node": "Preparar solicitud segura",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Generar matricula de prueba": {
+    "Preparar solicitud segura": {
       "main": [
         [
           {
-            "node": "Validar entrada",
+            "node": "MySQL - Buscar estudiante",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Validar entrada": {
+    "MySQL - Buscar estudiante": {
       "main": [
         [
           {
-            "node": "Proteger dato academico",
+            "node": "Resolver estudiante",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Proteger dato academico": {
+    "Resolver estudiante": {
+      "main": [
+        [
+          {
+            "node": "Validar origen y datos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar origen y datos": {
       "main": [
         [
           {
@@ -472,6 +574,11 @@
       "main": [
         [
           {
+            "node": "MySQL - Registrar estudiante nuevo",
+            "type": "main",
+            "index": 0
+          },
+          {
             "node": "MySQL - Registrar matricula",
             "type": "main",
             "index": 0
@@ -500,9 +607,9 @@
   },
   "active": false,
   "pinData": {},
-  "versionId": "77777777-7777-4777-8777-777777777777",
+  "versionId": "07-matricula-form-seguridad-soar-v2",
   "meta": {
-    "templateCredsSetupCompleted": false
+    "templateCredsSetupCompleted": true
   },
   "tags": []
 }
