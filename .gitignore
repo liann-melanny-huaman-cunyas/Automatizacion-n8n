@@ -84,3 +84,7 @@ certs/
 .env.local
 .env.production
 .env.development
+
+# Ignorar .env dentro de la subcarpeta de Laravel
+laravel/.env
+laravel/.env.backup
