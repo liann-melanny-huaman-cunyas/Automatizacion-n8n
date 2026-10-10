@@ -1,58 +1,175 @@
 @extends('layouts.app')
 
-@section('title','Certificados | CEFIC')
-@section('header','Certificados')
+@section('title', 'Nuevo comunicado | CEFIC')
+@section('header', 'Nuevo comunicado')
 
 @section('content')
 
-<h1 class="page-title">Certificados</h1>
-<p class="muted">Solicitudes y seguimiento de certificados.</p>
+<div style="
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:25px;
+">
+    <div>
+        <h2>Nuevo comunicado</h2>
 
-<br>
+        <p style="color:#6b7280; margin-top:5px;">
+            Registra un comunicado y selecciona los estudiantes destinatarios.
+        </p>
+    </div>
+
+    <a href="{{ route('comunicados.index') }}" class="btn">
+        Volver
+    </a>
+</div>
 
 <div class="card">
 
-<table>
-<thead>
-<tr>
-<th>ID</th>
-<th>Solicitante</th>
-<th>DNI</th>
-<th>Actividad</th>
-<th>Periodo</th>
-<th>Escenario</th>
-<th>Riesgo</th>
-<th>Estado</th>
-</tr>
-</thead>
+    <form action="{{ route('comunicados.store') }}" method="POST">
 
-<tbody>
+        @csrf
 
-@forelse($certificados as $c)
+        <div style="margin-bottom:20px;">
+            <label for="asunto">
+                <strong>Asunto</strong>
+            </label>
 
-<tr>
-<td>#{{ $c->id }}</td>
-<td>{{ $c->nombres_apellidos }}</td>
-<td>{{ $c->dni }}</td>
-<td>
-{{ ucfirst($c->tipo_actividad ?? '') }}
-<br>
-<small>{{ $c->nombre_actividad }}</small>
-</td>
-<td>{{ $c->periodo }}</td>
-<td><span class="badge">{{ $c->bloque }}</span></td>
-<td>{{ $c->score_riesgo ?? '—' }}</td>
-<td><span class="badge">{{ $c->estado }}</span></td>
-</tr>
+            <input
+                type="text"
+                id="asunto"
+                name="asunto"
+                value="{{ old('asunto') }}"
+                required
+                style="width:100%; margin-top:8px;"
+            >
 
-@empty
+            @error('asunto')
+                <small style="color:red;">
+                    {{ $message }}
+                </small>
+            @enderror
+        </div>
 
-<tr><td colspan="8">No existen solicitudes.</td></tr>
 
-@endforelse
+        <div style="margin-bottom:20px;">
+            <label for="cuerpo">
+                <strong>Mensaje</strong>
+            </label>
 
-</tbody>
-</table>
+            <textarea
+                id="cuerpo"
+                name="cuerpo"
+                rows="6"
+                required
+                style="width:100%; margin-top:8px;"
+            >{{ old('cuerpo') }}</textarea>
+
+            @error('cuerpo')
+                <small style="color:red;">
+                    {{ $message }}
+                </small>
+            @enderror
+        </div>
+
+
+        <div style="margin-bottom:20px;">
+
+            <label>
+                <strong>Seleccionar estudiantes</strong>
+            </label>
+
+            <p style="color:#6b7280;">
+                Selecciona los estudiantes que recibirán el comunicado.
+            </p>
+
+            @error('estudiantes')
+                <small style="color:red;">
+                    {{ $message }}
+                </small>
+            @enderror
+
+            <div class="card" style="margin-top:15px;">
+
+                <table>
+
+                    <thead>
+                        <tr>
+                            <th width="50">Seleccionar</th>
+                            <th>Estudiante</th>
+                            <th>DNI</th>
+                            <th>Correo</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+
+                    @forelse($estudiantes as $estudiante)
+
+                        <tr>
+
+                            <td>
+                                <input
+                                    type="checkbox"
+                                    name="estudiantes[]"
+                                    value="{{ $estudiante->id }}"
+                                    {{ in_array(
+                                        $estudiante->id,
+                                        old('estudiantes', [])
+                                    ) ? 'checked' : '' }}
+                                >
+                            </td>
+
+                            <td>
+                                {{ $estudiante->nombres_apellidos }}
+                            </td>
+
+                            <td>
+                                {{ $estudiante->dni }}
+                            </td>
+
+                            <td>
+                                {{ $estudiante->correo }}
+                            </td>
+
+                        </tr>
+
+                    @empty
+
+                        <tr>
+                            <td colspan="4">
+                                No existen estudiantes activos.
+                            </td>
+                        </tr>
+
+                    @endforelse
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        </div>
+
+
+        <div style="margin-top:25px;">
+
+            <button type="submit" class="btn">
+                Registrar comunicado
+            </button>
+
+            <a
+                href="{{ route('comunicados.index') }}"
+                class="btn"
+                style="margin-left:10px;"
+            >
+                Cancelar
+            </a>
+
+        </div>
+
+    </form>
 
 </div>
 

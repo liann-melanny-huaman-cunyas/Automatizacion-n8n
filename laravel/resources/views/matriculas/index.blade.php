@@ -10,26 +10,26 @@
 </div>
 
 <div class="card">
-
     <form method="GET" action="{{ route('matriculas.index') }}" class="search-form">
+        <!-- 1. Agregado el estilo responsive al input -->
         <input
+            style="width: 350px; max-width: 100%;"
             type="text"
             name="buscar"
             value="{{ $buscar }}"
             placeholder="Buscar por estudiante, código, programa o curso..."
         >
 
-        <button type="submit">
+        <!-- 2. Agregada la clase 'btn' al botón -->
+        <button type="submit" class="btn">
             Buscar
         </button>
     </form>
-
 </div>
 
 <div class="card table-card">
-
-    <div class="table-wrapper">
-
+    <!-- 3. Cambiado 'table-wrapper' por 'table-responsive' -->
+    <div class="table-responsive">
         <table>
             <thead>
                 <tr>

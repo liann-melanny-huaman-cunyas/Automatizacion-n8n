@@ -56,6 +56,7 @@ class ComunicadoController extends Controller
                 ->get();
 
             foreach ($estudiantes as $estudiante) {
+
                 ComunicadoDestinatario::create([
                     'comunicado_id' => $comunicado->id,
                     'estudiante_id' => $estudiante->id,
