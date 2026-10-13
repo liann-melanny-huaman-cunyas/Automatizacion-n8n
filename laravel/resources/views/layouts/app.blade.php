@@ -91,6 +91,44 @@ body {
     border-radius: 13px;
     padding: 22px;
 }
+
+/* --- PAGINACIÓN CEFIC --- */
+.paginacion ul {
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.paginacion li { list-style: none; }
+.paginacion a,
+.paginacion span {
+    display: block;
+    min-width: 38px;
+    padding: 8px 12px;
+    text-align: center;
+    border: 1px solid #e5e9f0;
+    border-radius: 6px;
+    background: #fff;
+    color: #18212f;
+    text-decoration: none;
+    font-size: 14px;
+    transition: background .2s;
+}
+.paginacion a:hover { background: #f5f7fb; }
+.paginacion .active span {
+    background: #111827;
+    border-color: #111827;
+    color: #fff;
+    font-weight: 700;
+}
+.paginacion .disabled span {
+    color: #aeb9cc;
+    background: #fdfdfd;
+}
+/* --- FIN PAGINACIÓN --- */
 .stat-number {
     font-size: 30px;
     font-weight: 700;
@@ -229,6 +267,22 @@ nav[role="navigation"] svg {
     width: 18px;
     height: 18px;
 }
+
+.warning { background: #fffaeb; color: #b54708; }
+.error   { background: #fef3f2; color: #b42318; }
+/* --- MODALES --- */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;
+          align-items:center;justify-content:center;padding:15px;}
+.modal-bg.open{display:flex;}
+.modal-box{background:#fff;border-radius:10px;padding:22px;width:520px;max-width:100%;
+           max-height:90vh;overflow-y:auto;}
+.modal-box label{display:block;margin-top:10px;font-weight:600;font-size:.9em;}
+.modal-actions{margin-top:18px;display:flex;gap:8px;justify-content:flex-end;}
+.err{color:#c0392b;font-size:.8em;}
+.btn-sm{padding:5px 10px;font-size:.85em;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:0 12px;}
+@media(max-width:600px){.form-row{grid-template-columns:1fr;}}
+/* --- FIN MODALES --- */
 /* --- FIN FIX PAGINACIÓN --- */
 
 /* Escritorio Pequeño / Tablets (hasta 992px) */
@@ -317,11 +371,11 @@ nav[role="navigation"] svg {
 
 <section class="content">
 
-@if(session('success'))
-<div class="alert success">
-    {{ session('success') }}
-</div>
-@endif
+@foreach(['success', 'warning', 'error'] as $tipo)
+    @if(session($tipo))
+        <div class="alert {{ $tipo }}">{{ session($tipo) }}</div>
+    @endif
+@endforeach
 
 @yield('content')
 

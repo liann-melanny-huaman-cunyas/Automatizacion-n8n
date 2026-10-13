@@ -30,24 +30,23 @@ Route::middleware([CeficAuth::class])->group(function () {
     Route::get('/inicio', [DashboardController::class, 'index'])
         ->name('dashboard');
 
-    Route::get('/estudiantes', [EstudianteController::class, 'index'])
-        ->name('estudiantes.index');
+    // ===== CRUD con modales (sin páginas create/show/edit) =====
+    Route::resource('estudiantes', EstudianteController::class)
+        ->except(['create', 'show', 'edit']);
 
-    Route::get('/matriculas', [MatriculaController::class, 'index'])
-        ->name('matriculas.index');
+    Route::resource('matriculas', MatriculaController::class)
+        ->except(['create', 'show', 'edit']);
 
-    Route::get('/certificados', [CertificadoController::class, 'index'])
-        ->name('certificados.index');
-
-    Route::get('/comunicados', [ComunicadoController::class, 'index'])
-        ->name('comunicados.index');
+    Route::resource('certificados', CertificadoController::class)
+        ->except(['create', 'show', 'edit']);
 
     Route::get('/comunicados/nuevo', [ComunicadoController::class, 'create'])
         ->name('comunicados.create');
 
-    Route::post('/comunicados', [ComunicadoController::class, 'store'])
-        ->name('comunicados.store');
+    Route::resource('comunicados', ComunicadoController::class)
+        ->except(['create', 'show', 'edit']);
 
+    // ===== Otros módulos =====
     Route::get('/seguridad', [SeguridadController::class, 'index'])
         ->name('seguridad.index');
 

@@ -41,7 +41,7 @@
                 name="asunto"
                 value="{{ old('asunto') }}"
                 required
-                style="width:100%; margin-top:8px;"
+                style="width:100%; margin-top:8px; padding: 8px;"
             >
 
             @error('asunto')
@@ -62,7 +62,7 @@
                 name="cuerpo"
                 rows="6"
                 required
-                style="width:100%; margin-top:8px;"
+                style="width:100%; margin-top:8px; padding: 8px;"
             >{{ old('cuerpo') }}</textarea>
 
             @error('cuerpo')
@@ -83,6 +83,17 @@
                 Selecciona los estudiantes que recibirán el comunicado.
             </p>
 
+            <!-- INICIO DEL BUSCADOR -->
+            <div style="margin-top: 15px;">
+                <input 
+                    type="text" 
+                    id="buscador" 
+                    placeholder="Buscar por nombre, DNI o correo..." 
+                    style="width:100%; padding:8px; border: 1px solid #ccc; border-radius: 4px;"
+                >
+            </div>
+            <!-- FIN DEL BUSCADOR -->
+
             @error('estudiantes')
                 <small style="color:red;">
                     {{ $message }}
@@ -102,7 +113,7 @@
                         </tr>
                     </thead>
 
-                    <tbody>
+                    <tbody id="tabla-estudiantes">
 
                     @forelse($estudiantes as $estudiante)
 
@@ -172,5 +183,29 @@
     </form>
 
 </div>
+
+<!-- SCRIPT DEL BUSCADOR EN TIEMPO REAL -->
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const buscador = document.getElementById('buscador');
+        const filas = document.querySelectorAll('#tabla-estudiantes tr');
+
+        buscador.addEventListener('keyup', function() {
+            const textoBusqueda = this.value.toLowerCase();
+
+            filas.forEach(fila => {
+                if (fila.cells.length < 4) return;
+
+                const contenidoFila = fila.textContent.toLowerCase();
+
+                if (contenidoFila.includes(textoBusqueda)) {
+                    fila.style.display = '';
+                } else {
+                    fila.style.display = 'none';
+                }
+            });
+        });
+    });
+</script>
 
 @endsection

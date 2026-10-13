@@ -11,20 +11,16 @@ class SeguridadController extends Controller
     {
         $escenario = $request->get('escenario', 'todos');
 
-        $query = DB::table('log_eventos');
-
-        if ($escenario !== 'todos') {
-            $query->where('escenario', $escenario);
+        if (!in_array($escenario, ['todos', 'sin_seguridad', 'con_seguridad'], true)) {
+            $escenario = 'todos';
         }
 
-        $eventos = $query
+        $eventos = DB::table('log_eventos')
+            ->when($escenario !== 'todos', fn ($q) => $q->where('escenario', $escenario))
             ->orderByDesc('id')
-            ->limit(100)
-            ->get();
+            ->paginate(15)
+            ->withQueryString();
 
-        return view('seguridad.index', compact(
-            'eventos',
-            'escenario'
-        ));
+        return view('seguridad.index', compact('eventos', 'escenario'));
     }
 }
